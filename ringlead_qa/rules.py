@@ -483,10 +483,15 @@ def check_master_choice(g: Group) -> list[Finding]:
     out: list[Finding] = []
 
     master_act = g.master.get(F.F_ACTIVITY)
+    master_born = g.master.get(F.F_CREATED)[:10]
     fresher = [
         (d, d.get(F.F_ACTIVITY))
         for d in g.duplicates
         if d.get(F.F_ACTIVITY) and (not master_act or d.get(F.F_ACTIVITY) > master_act)
+        # An activity older than the master's own creation cannot show the duplicate
+        # is the fresher record. Without this a 2024 touch on a 2024 record outranks
+        # a record created in 2026 purely because the newer one has no activity yet.
+        and (not master_born or d.get(F.F_ACTIVITY)[:10] >= master_born)
     ]
     if fresher:
         rec, when = max(fresher, key=lambda dv: dv[1])
