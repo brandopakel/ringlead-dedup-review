@@ -151,6 +151,23 @@ def company_matches_domain(company, domain) -> bool:
     return cjoined in djoined or djoined in cjoined
 
 
+def same_company(a, b) -> bool:
+    """Do two company names refer to the same employer?
+
+    Distinct from :func:`company_matches_domain`, which compares a name to a web
+    domain. Used to check that an Account link actually corroborates the employer
+    before it gets recommended -- "Sail by the Numbers" must not be offered as the
+    Account for someone at Microsoft.
+    """
+    ta, tb = company_tokens(a), company_tokens(b)
+    if not ta or not tb:
+        return False
+    if ta & tb:
+        return True
+    ja, jb = "".join(sorted(ta)), "".join(sorted(tb))
+    return ja in jb or jb in ja
+
+
 def domain_only(value) -> str:
     """Bare registrable host from a URL, email or domain -- an Account's identity.
 

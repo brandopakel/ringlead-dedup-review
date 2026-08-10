@@ -244,7 +244,15 @@ def check_employment(g: Group) -> list[Finding]:
             )]
             # Carry the rest of that record's employer identity, but only where the
             # survivor actually disagrees -- a correction that changes nothing is noise.
-            for logical in (F.F_ACCOUNT_ID, F.F_ACCOUNT_NAME, F.F_DOMAIN):
+            #
+            # The Account link is carried only when it corroborates Company. That
+            # record owning the right *email* does not mean it is filed under the
+            # right *Account*, and recommending one wrong Account in place of another
+            # is worse than leaving it alone.
+            carry = [F.F_DOMAIN]
+            if N.same_company(company, current.get(F.F_ACCOUNT_NAME)):
+                carry = [F.F_ACCOUNT_ID, F.F_ACCOUNT_NAME, *carry]
+            for logical in carry:
                 theirs, survivors = current.get(logical), g.surviving.get(logical)
                 if theirs and theirs != survivors:
                     fixes.append(Correction(
@@ -590,12 +598,30 @@ class Verdict:
         return "Clean merge"
 
     @property
+    def corrections_blocked(self) -> str:
+        """Why no field recommendations are offered, or "" if they are.
+
+        Every correction assumes the group is one entity whose fields can be pooled.
+        When identity is contradicted that premise is gone: copying the other
+        record's email and employer onto the survivor would fuse two different
+        people. The right output there is "look at this", not "set these values".
+        """
+        if any(f.code == "identity_conflict" for f in self.findings):
+            return (
+                "These records may not be the same person, so no values are "
+                "recommended — confirm the match first."
+            )
+        return ""
+
+    @property
     def corrections(self) -> list[Correction]:
         """What the surviving record should say, one entry per field.
 
         First finding to claim a column wins, and findings are already sorted
         critical-first, so a demonstrable defect outranks a softer suggestion.
         """
+        if self.corrections_blocked:
+            return []
         seen: dict[str, Correction] = {}
         for f in self.findings:
             for c in f.corrections:

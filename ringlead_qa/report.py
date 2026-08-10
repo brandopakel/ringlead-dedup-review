@@ -198,6 +198,9 @@ tr.flagged th.fld{box-shadow:inset 3px 0 0 hsl(var(--info));
 .tgl{font:inherit;font-size:11px;background:none;border:0;color:hsl(var(--info));
   cursor:pointer;padding:0;text-decoration:underline;margin-left:auto}
 
+.fixes.blocked{border-color:hsl(var(--warning)/.4);background:hsl(var(--warning)/.05)}
+.fixes.blocked h3{color:hsl(var(--warning))}
+.fixes.blocked .fnote{margin-top:0}
 .empty{color:hsl(var(--muted-foreground));padding:40px;text-align:center;
   border:1px dashed hsl(var(--border));border-radius:var(--radius)}
 .clean{columns:5;column-gap:16px}
@@ -343,7 +346,17 @@ def _table(v: Verdict, tid: str) -> str:
     # "After merge" is RingLead's prediction of what will happen, defects included --
     # it is not a target. Where the right value is derivable, a "Should be" column
     # states it, so a reviewer knows what to set rather than only what is wrong.
-    fixes = {c.column: c for c in v.corrections}
+    #
+    # Corrections are keyed by logical field name; this table iterates real column
+    # names. Resolve before matching or nothing ever lines up.
+    #
+    # A pending master change makes every value here provisional -- the surviving
+    # record itself is about to change -- so the column is dropped, matching the
+    # correction sheet, which holds those groups back for the same reason.
+    fixes = (
+        {} if v.master_change
+        else {g.schema.resolve(c.column) or c.column: c for c in v.corrections}
+    )
 
     order = [g.surviving, g.master, *g.duplicates]
     heads = ['<th class="fld">Field</th>', '<th class="col-surv">After merge</th>']
@@ -425,6 +438,11 @@ def _findings(v: Verdict) -> str:
 def _fixes(v: Verdict) -> str:
     """The corrected values, stated plainly before the field-by-field table."""
     mc = v.master_change
+    if v.corrections_blocked:
+        return (
+            '<div class="fixes blocked"><h3>No values recommended</h3>'
+            f'<p class="fnote">{_esc(v.corrections_blocked)}</p></div>'
+        )
     if not v.corrections and not mc:
         return ""
 
@@ -440,20 +458,22 @@ def _fixes(v: Verdict) -> str:
             + "</td></tr>"
         )
 
+    field_rows = [] if mc else list(v.corrections)
     rows = master_row + "".join(
         f"<tr><th>{_esc(v.group.schema.label(c.column))}</th>"
         f'<td class="was">{_esc(v.group.surviving.get(c.column)) or "—"}</td>'
         f'<td class="arrow">&rarr;</td>'
         f'<td class="fix">{_esc(c.value)}</td>'
         f'<td class="why">{_esc(c.why)}</td></tr>'
-        for c in v.corrections
+        for c in field_rows
     )
     # A master change is applied in RingLead before merging; the field values below it
     # are computed against the *current* preview, so they have to be re-read afterwards.
     note = (
-        '<p class="fnote">Changing the master changes which record survives. Re-run this '
-        'report after the change — the field values below are computed against the '
-        'current merge preview.</p>' if mc else ""
+        '<p class="fnote">Changing the master changes which record survives, so no '
+        'field values are recommended yet. Make this change in RingLead, re-export, '
+        'and re-run — the corrections are computed against whichever record survives.'
+        '</p>' if mc else ""
     )
     heading = "Change the master, then re-check" if mc else "Set these on the surviving record"
     return (
