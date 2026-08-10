@@ -14,14 +14,24 @@ from ringlead_qa.remediation import correction_sheet, master_change_sheet
 from ringlead_qa.rules import Correction, Finding, MasterChange, Verdict, evaluate
 
 
+# Every logical field the fixtures set, resolved against a Lead schema.
+LEAD_COLS = [F.GROUP_ID, F.RECORD_ACTION, F.ENTITY_TYPE] + [
+    F.LEAD.prefix + label
+    for labels in F.LEAD.fields.values() for label in labels
+]
+SCHEMA = F.Schema.build("Lead", LEAD_COLS)
+
+
 def rec(role, **vals):
+    """Build a record from logical field names, e.g. rec("master", **{F.F_EMAIL: ...})."""
     data = {F.RECORD_ACTION: role, F.GROUP_ID: "g1"}
-    data.update(vals)
-    return Record(role, data)
+    data.update({SCHEMA.col(k) or k: v for k, v in vals.items()})
+    return Record(role, data, SCHEMA)
 
 
 def group(master, dups, surviving):
-    return Group(group_id="g1", surviving=surviving, master=master, duplicates=dups)
+    return Group(group_id="g1", schema=SCHEMA, surviving=surviving,
+                 master=master, duplicates=dups)
 
 
 @pytest.fixture
@@ -29,15 +39,15 @@ def stale_email_group():
     """Survivor works at Intuit but keeps a former employer's address."""
     common = {F.F_COMPANY: "Intuit", F.F_FULL_NAME: "Sangjin Lee", F.F_LINKEDIN: "in/slee"}
     master = rec("master", **common, **{
-        F.F_EMAIL: "slee@apple.com", F.F_LEAD_ID: "00Q_MASTER",
+        F.F_EMAIL: "slee@apple.com", F.F_RECORD_ID: "00Q_MASTER",
         F.F_MODIFIED: "2024-01-01T00:00:00.000Z",
     })
     dup = rec("duplicate", **common, **{
-        F.F_EMAIL: "sangjin_lee@intuit.com", F.F_LEAD_ID: "00Q_DUP",
+        F.F_EMAIL: "sangjin_lee@intuit.com", F.F_RECORD_ID: "00Q_DUP",
         F.F_MODIFIED: "2026-01-01T00:00:00.000Z",
     })
     surv = rec("surviving", **common, **{
-        F.F_EMAIL: "slee@apple.com", F.F_LEAD_ID: "00Q_MASTER",
+        F.F_EMAIL: "slee@apple.com", F.F_RECORD_ID: "00Q_MASTER",
     })
     return group(master, [dup], surv)
 
@@ -67,15 +77,15 @@ class TestCorrections:
 
 class TestMasterChange:
     def test_corroborated_recommendation_wins(self):
-        weak = MasterChange(record=rec("duplicate", **{F.F_LEAD_ID: "00Q_WEAK"}),
+        weak = MasterChange(record=rec("duplicate", **{F.F_RECORD_ID: "00Q_WEAK"}),
                             why="one signal", corroborated=False)
-        strong = MasterChange(record=rec("duplicate", **{F.F_LEAD_ID: "00Q_STRONG"}),
+        strong = MasterChange(record=rec("duplicate", **{F.F_RECORD_ID: "00Q_STRONG"}),
                               why="two signals", corroborated=True)
         v = Verdict(group=None, findings=[
             Finding("a", "review", "t", "d", master_change=weak),
             Finding("b", "review", "t", "d", master_change=strong),
         ])
-        assert v.master_change.record.lead_id == "00Q_STRONG"
+        assert v.master_change.record.record_id == "00Q_STRONG"
 
     def test_absent_when_nothing_recommends_one(self, stale_email_group):
         assert evaluate(stale_email_group).master_change is None
@@ -109,9 +119,9 @@ class TestSheetRouting:
         common = {F.F_COMPANY: "Acme", F.F_FULL_NAME: "Jo Doe",
                   F.F_EMAIL: "jo@acme.com", F.F_LINKEDIN: "in/jodoe",
                   F.F_MODIFIED: "2026-01-01T00:00:00.000Z"}
-        m = rec("master", **common, **{F.F_LEAD_ID: "00Q_A"})
-        d = rec("duplicate", **common, **{F.F_LEAD_ID: "00Q_B"})
-        s = rec("surviving", **common, **{F.F_LEAD_ID: "00Q_A"})
+        m = rec("master", **common, **{F.F_RECORD_ID: "00Q_A"})
+        d = rec("duplicate", **common, **{F.F_RECORD_ID: "00Q_B"})
+        s = rec("surviving", **common, **{F.F_RECORD_ID: "00Q_A"})
         v = evaluate(group(m, [d], s))
         assert correction_sheet([v]).empty
         assert master_change_sheet([v]).empty

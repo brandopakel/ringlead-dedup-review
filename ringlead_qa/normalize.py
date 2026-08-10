@@ -151,6 +151,18 @@ def company_matches_domain(company, domain) -> bool:
     return cjoined in djoined or djoined in cjoined
 
 
+def domain_only(value) -> str:
+    """Bare registrable host from a URL, email or domain -- an Account's identity.
+
+    "https://www.Northwind-Logistics.com/about" and "northwind-logistics.com" are the
+    same company; comparing the raw Website strings would say otherwise.
+    """
+    v = lower(value).split("@")[-1]
+    v = re.sub(r"^https?://", "", v).split("/")[0].split("?")[0]
+    v = re.sub(r"^www\.", "", v).strip(". ")
+    return v if "." in v else ""
+
+
 def informative_title(value) -> bool:
     return lower(value) not in UNINFORMATIVE_TITLES
 

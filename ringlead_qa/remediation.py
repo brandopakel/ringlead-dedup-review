@@ -163,15 +163,16 @@ def correction_sheet(verdicts: list[Verdict]) -> pd.DataFrame:
             # master_change_sheet() -- and re-derived once the master is corrected.
             continue
         row = {
-            "Id": v.group.surviving.lead_id,
+            "Id": v.group.surviving.record_id,
             "Group ID": v.group.group_id,
             "Status": v.status,
             "Name": v.group.surviving.get(F.F_FULL_NAME),
             "Company": v.group.surviving.get(F.F_COMPANY),
         }
         for c in corrections:
-            row[F.label(c.column)] = c.value
-            row[f"[was] {F.label(c.column)}"] = v.group.surviving.get(c.column)
+            label = v.group.schema.label(c.column)
+            row[label] = c.value
+            row[f"[was] {label}"] = v.group.surviving.get(c.column)
         rows.append(row)
 
     if not rows:
@@ -201,8 +202,8 @@ def master_change_sheet(verdicts: list[Verdict]) -> pd.DataFrame:
             "Status": v.status,
             "Name": v.group.surviving.get(F.F_FULL_NAME),
             "Company": v.group.surviving.get(F.F_COMPANY),
-            "Current master": v.group.master.lead_id,
-            "Should be master": mc.record.lead_id,
+            "Current master": v.group.master.record_id,
+            "Should be master": mc.record.record_id,
             "Why": mc.why,
             "Confidence": "corroborated" if mc.corroborated else "single signal",
             "Field fixes held back": len(v.corrections),
@@ -215,5 +216,5 @@ def master_change_sheet(verdicts: list[Verdict]) -> pd.DataFrame:
 def correction_summary(verdicts: list[Verdict]) -> Counter:
     """How many records need each field corrected."""
     return Counter(
-        F.label(c.column) for v in verdicts for c in v.corrections
+        v.group.schema.label(c.column) for v in verdicts for c in v.corrections
     )

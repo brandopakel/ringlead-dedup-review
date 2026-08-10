@@ -112,20 +112,28 @@ def freshest(records: list[Record]) -> Record | None:
 # Identity: is this one human?
 # --------------------------------------------------------------------------
 
+# Normalizers referenced by EntitySpec.identity, resolved by name so the catalog
+# stays declarative.
+NORMALIZERS = {
+    "linkedin": N.linkedin,
+    "lower": N.lower,
+    "phone_digits": N.phone_digits,
+    "domain_only": N.domain_only,
+}
+
+
 def check_identity(g: Group) -> list[Finding]:
     out: list[Finding] = []
-    norm = {
-        F.F_LINKEDIN: (N.linkedin, "LinkedIn profile"),
-        F.F_ZI_CONTACT: (N.lower, "ZoomInfo Contact ID"),
-        F.F_MOBILE: (N.phone_digits, "mobile number"),
-    }
 
     agreed, conflicted = [], []
-    for col, (fn, name) in norm.items():
-        vals = [v for v in (fn(r.get(col)) for r in g.records) if v]
+    for logical, norm_name, name in g.schema.identity_signals:
+        fn = NORMALIZERS[norm_name]
+        vals = [v for v in (fn(r.get(logical)) for r in g.records) if v]
         if len(vals) < 2:
             continue
-        (conflicted if len(set(vals)) > 1 else agreed).append((col, name, sorted(set(vals))))
+        (conflicted if len(set(vals)) > 1 else agreed).append(
+            (logical, name, sorted(set(vals)))
+        )
 
     # An exact email match is also proof, though rarer here than the fields above.
     emails = [e for e in (N.email(r.get(F.F_EMAIL)) for r in g.records) if e]
@@ -139,7 +147,7 @@ def check_identity(g: Group) -> list[Finding]:
             title="Records may be different people",
             detail=f"{name.capitalize()} does not match. A shared name is not enough to merge on.",
             fields=[col],
-            evidence=[(F.label(col), " vs ".join(vals[:3]))],
+            evidence=[(g.schema.label(col), " vs ".join(vals[:3]))],
         ))
 
     if not agreed and not conflicted:
@@ -153,8 +161,10 @@ def check_identity(g: Group) -> list[Finding]:
         ))
 
     # Differing names are usually nicknames (Mike/Michael), so this only adds weight.
+    # Skipped for Accounts, where the "name" is the company itself and is part of the
+    # match key rather than evidence about it.
     names = {N.person_name(r.get(F.F_FULL_NAME)) for r in g.records if r.get(F.F_FULL_NAME)}
-    if len(names) > 1 and not agreed:
+    if g.entity != "Account" and len(names) > 1 and not agreed:
         out.append(Finding(
             code="name_variant",
             severity=CONTRIB,
@@ -438,7 +448,7 @@ def check_data_loss(g: Group) -> list[Finding]:
     if oldest is not None:
         overwritten = [
             (col, oldest.get(col), g.surviving.get(col))
-            for col in F.HISTORICAL_FIELDS
+            for col in g.schema.historical_fields
             if oldest.get(col) and g.surviving.get(col) and oldest.get(col) != g.surviving.get(col)
         ]
         if overwritten:
@@ -450,7 +460,7 @@ def check_data_loss(g: Group) -> list[Finding]:
                 detail="The survivor reports a later source than the original record.",
                 weight=0,
                 fields=[c for c, _, _ in overwritten],
-                evidence=[("Field", F.label(col)), ("Original", was), ("Survivor", now)],
+                evidence=[("Field", g.schema.label(col)), ("Original", was), ("Survivor", now)],
                 corrections=[
                     Correction(c, old, "first-touch attribution belongs to the original record")
                     for c, old, _ in overwritten
@@ -465,8 +475,8 @@ def check_data_loss(g: Group) -> list[Finding]:
             out.append(Finding(
                 code="narrative_loss",
                 severity=REVIEW,
-                title=f"{F.label(col)} is destroyed by the merge",
-                detail=f"The survivor keeps no {F.label(col).lower()}.",
+                title=f"{g.schema.label(col)} is destroyed by the merge",
+                detail=f"The survivor keeps no {g.schema.label(col).lower()}.",
                 fields=[col],
                 evidence=[("On the", rec.label.lower()), ("Lost text", val[:200])],
             ))
@@ -492,7 +502,7 @@ def check_data_loss(g: Group) -> list[Finding]:
     # --- everything else worth counting -------------------------------------
     high_lost = [
         col for col in g.populated_columns()
-        if F.tier(col) == "high"
+        if g.schema.tier(col) == "high"
         and col not in {F.F_NOTES, F.F_DESCRIPTION, F.F_UNQUALIFIED, F.F_EMAIL, F.F_LIFECYCLE}
         and g.lost_values(col)
     ]
@@ -504,7 +514,7 @@ def check_data_loss(g: Group) -> list[Finding]:
             detail="Values present on a duplicate do not survive the merge.",
             weight=0,
             fields=high_lost[:10],
-            evidence=[("Fields", ", ".join(F.label(c) for c in high_lost[:8]))],
+            evidence=[("Fields", ", ".join(g.schema.label(c) for c in high_lost[:8]))],
         ))
 
     return out

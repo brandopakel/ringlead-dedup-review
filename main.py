@@ -55,7 +55,7 @@ def triage_frame(verdicts) -> pd.DataFrame:
             "Name": g.surviving.get(F.F_FULL_NAME),
             "Company": g.surviving.get(F.F_COMPANY),
             "Surviving Email": g.surviving.get(F.F_EMAIL),
-            "Master Lead ID": g.master.lead_id,
+            "Master Record ID": g.master.record_id,
             "Findings": "; ".join(f.title for f in v.findings if f.severity != "contributor"),
             "Codes": ",".join(sorted({f.code for f in v.findings})),
             "Contributor Score": v.contributor_score,
@@ -71,13 +71,19 @@ def main() -> int:
     ap.add_argument("-o", "--out", type=Path, help="HTML report path")
     ap.add_argument("--csv-out", type=Path, help="also write a flat triage CSV")
     ap.add_argument("--open", action="store_true", help="open the report when done")
+    ap.add_argument("--schema", action="store_true",
+                    help="print how logical fields resolved for this export, then exit")
     args = ap.parse_args()
 
     src = args.csv or newest_export()
     if not src.exists():
         sys.exit(f"No such file: {src}")
 
-    groups, df = load(str(src))
+    groups, df, schema = load(str(src))
+    if args.schema:
+        print(schema.report())
+        return 0
+
     verdicts = [evaluate(g) for g in groups]
     counts = Counter(v.status for v in verdicts)
     queue = counts["critical"] + counts["review"]
@@ -105,7 +111,11 @@ def main() -> int:
 
     pct = round(counts["ok"] / len(verdicts) * 100) if verdicts else 0
     print(f"\n  {src.name}")
-    print(f"  {len(df):,} rows · {len(groups)} groups\n")
+    print(f"  {schema.entity} · {len(df):,} rows · {len(groups)} groups")
+    if schema.unresolved:
+        print(f"  {len(schema.unresolved)} field(s) not found in this export "
+              f"— run --schema for detail")
+    print()
     print(f"  {counts['critical']:>4}  needs a fix")
     print(f"  {counts['review']:>4}  needs review")
     print(f"  {counts['ok']:>4}  clean, skip  ({pct}%)\n")

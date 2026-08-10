@@ -372,12 +372,12 @@ def _table(v: Verdict, tid: str) -> str:
     # Noise-tier columns (record IDs, modstamps, round-robin counters) differ on every
     # record by construction. Rendering them triples the page weight and hides the
     # fields a reviewer can act on, so they never reach the table.
-    cols = [c for c in g.populated_columns() if F.tier(c) != "noise" or c in highlight]
+    cols = [c for c in g.populated_columns() if g.schema.tier(c) != "noise" or c in highlight]
     if v.status == "ok":
         # Clean groups exist for spot-checking, not reviewing. A short identity table
         # confirms the call at a glance and keeps 238 skippable groups from dominating
         # the page weight.
-        cols = [c for c in cols if c in F.DISPLAY_ORDER]
+        cols = [c for c in cols if c in set(g.schema.display_columns)]
     differing = set(g.differing_columns())
 
     # "After merge" is RingLead's prediction of what will happen, defects included --
@@ -393,14 +393,14 @@ def _table(v: Verdict, tid: str) -> str:
     for rec in order[1:]:
         cls = "col-master" if rec.role == "master" else ""
         label = _esc(rec.label)
-        if mc and rec.lead_id == mc.record.lead_id:
+        if mc and rec.record_id == mc.record.record_id:
             cls = (cls + " col-newmaster").strip()
             label = "Should be master"
         elif mc and rec.role == "master":
             label = "Master (change)"
         heads.append(
             f'<th class="{cls}">{label}'
-            f'<span class="sf">{_esc(rec.lead_id)}</span></th>'
+            f'<span class="sf">{_esc(rec.record_id)}</span></th>'
         )
 
     rows = []
@@ -408,7 +408,7 @@ def _table(v: Verdict, tid: str) -> str:
         same = col not in differing and col not in highlight
         survivor = g.surviving.get(col)
         cells = [
-            f'<th class="fld">{_esc(F.label(col))}</th>',
+            f'<th class="fld">{_esc(g.schema.label(col))}</th>',
             f'<td class="col-surv">{_esc(survivor) or "—"}</td>',
         ]
         if fixes:
@@ -472,16 +472,16 @@ def _fixes(v: Verdict) -> str:
     if mc:
         master_row = (
             '<tr class="mrow"><th>Master record</th>'
-            f'<td class="was">{_esc(v.group.master.lead_id)}</td>'
+            f'<td class="was">{_esc(v.group.master.record_id)}</td>'
             '<td class="arrow">&rarr;</td>'
-            f'<td class="fix">{_esc(mc.record.lead_id)}</td>'
+            f'<td class="fix">{_esc(mc.record.record_id)}</td>'
             f'<td class="why">{_esc(mc.why)}'
             + ("" if mc.corroborated else " — single signal, confirm before changing")
             + "</td></tr>"
         )
 
     rows = master_row + "".join(
-        f"<tr><th>{_esc(F.label(c.column))}</th>"
+        f"<tr><th>{_esc(v.group.schema.label(c.column))}</th>"
         f'<td class="was">{_esc(v.group.surviving.get(c.column)) or "—"}</td>'
         f'<td class="arrow">&rarr;</td>'
         f'<td class="fix">{_esc(c.value)}</td>'
