@@ -377,10 +377,28 @@ def check_employment(g: Group) -> list[Finding]:
                         f"belongs with the {company} record that owns the kept email",
                     ))
             trailing = [g.schema.label(c.column) for c in fixes[1:]]
+            # When two or more of the survivor's employer fields all have to be
+            # overridden from one duplicate, that duplicate is the current-employer
+            # record and promoting it is the real fix. Overriding Email, Account and
+            # Domain by hand is the same change made three times, and it leaves
+            # Account :: Name disagreeing with Company until every one is applied.
+            promote = (
+                MasterChange(
+                    record=current,
+                    why=(
+                        f"holds the current {company} email and Account; promoting it "
+                        f"settles {len(fixes)} fields at once"
+                    ),
+                    corroborated=True,
+                )
+                if current is not g.master and len(fixes) >= 2
+                else None
+            )
             out.append(Finding(
                 code="stale_email_kept",
                 severity=CRITICAL,
                 title="Merge keeps the wrong primary email",
+                master_change=promote,
                 detail=(
                     f"The survivor works at {company} but keeps "
                     f"{'a personal address' if personal else 'a former employer’s address'}"
@@ -389,6 +407,32 @@ def check_employment(g: Group) -> list[Finding]:
                 fields=[F.F_EMAIL, F.F_COMPANY, F.F_DOMAIN, F.F_ACCOUNT_ID, F.F_ACCOUNT_NAME],
                 evidence=[("Company", company), ("Keeps", kept), ("Discards", addr)],
                 corrections=fixes,
+            ))
+
+    # --- is the enriched employer corroborated by anything? -----------------
+    # Company comes from enrichment, and enrichment goes stale. When not one address
+    # in the group belongs to that employer there is nothing backing it up, which
+    # also means any employer-based recommendation rests on an unverified premise.
+    # Weight 0: this describes 31% of the file, so it is context, not evidence.
+    if company and not N.is_placeholder_company(company):
+        addresses = [N.email(r.get(F.F_EMAIL)) for r in g.records if N.email(r.get(F.F_EMAIL))]
+        if addresses and not any(
+            N.company_matches_domain(company, N.email_domain(a)) for a in addresses
+        ):
+            out.append(Finding(
+                code="company_unconfirmed",
+                severity=CONTRIB,
+                title="No email backs up the stated employer",
+                detail=(
+                    f"Nothing in this group belongs to {company}, so the enriched "
+                    "employer may be out of date."
+                ),
+                weight=0,
+                fields=[F.F_COMPANY, F.F_EMAIL],
+                evidence=[
+                    ("Company", company),
+                    ("Addresses", ", ".join(sorted({N.email_domain(a) for a in addresses}))),
+                ],
             ))
 
     # --- the survivor's title should come from the freshest record ----------
@@ -592,13 +636,55 @@ def check_data_loss(g: Group) -> list[Finding]:
                 )],
             ))
 
+    # --- the latest event outranks the first one ----------------------------
+    # Lead Source Detail names the specific campaign or event. For event-sourced
+    # records the most recent one is the useful fact -- which event they last
+    # attended -- so recency wins there even though the surrounding fields are
+    # first-touch history.
+    detail_col = g.schema.col(F.F_LEAD_SOURCE_DETAIL)
+    event_records = [
+        r for r in g.records
+        if F.EVENT_SOURCE_MARKER in N.lower(r.get(F.F_LEAD_SOURCE)) and r.get(F.F_LEAD_SOURCE_DETAIL)
+    ]
+    if detail_col and len(event_records) >= 1:
+        latest = max(event_records, key=recency)
+        kept_detail = g.surviving.get(F.F_LEAD_SOURCE_DETAIL)
+        if kept_detail and latest.get(F.F_LEAD_SOURCE_DETAIL) != kept_detail:
+            out.append(Finding(
+                # Weight 0: the right value is derivable, so this needs applying
+                # rather than judging. It reaches the reviewer as a "Should be" value
+                # and reaches the criteria owner as a survivorship change.
+                code="stale_event_kept",
+                severity=CONTRIB,
+                weight=0,
+                title="Merge keeps an older event",
+                detail="The most recent event attended is the more useful record.",
+                fields=[F.F_LEAD_SOURCE_DETAIL],
+                evidence=[
+                    ("Keeps", kept_detail),
+                    ("Discards", latest.get(F.F_LEAD_SOURCE_DETAIL)),
+                ],
+                corrections=[Correction(
+                    F.F_LEAD_SOURCE_DETAIL, latest.get(F.F_LEAD_SOURCE_DETAIL),
+                    "most recent event attended",
+                )],
+            ))
+
     # --- the original source is history and must not be overwritten ---------
     oldest = min(g.records, key=recency) if len(g.records) > 1 else None
     if oldest is not None:
+        # Lead Source Detail is excluded when the group is event-sourced: recency
+        # already decided it just above, and both rules claiming the column would
+        # emit contradictory targets.
+        skip_detail = detail_col if event_records else None
         overwritten = [
             (col, oldest.get(col), g.surviving.get(col))
             for col in g.schema.historical_fields
-            if oldest.get(col) and g.surviving.get(col) and oldest.get(col) != g.surviving.get(col)
+            if col != skip_detail
+            and oldest.get(col) and g.surviving.get(col)
+            # Case-insensitive: "ZoomInfo" surviving as "Zoominfo" is the same value
+            # typed differently, not first-touch attribution being overwritten.
+            and N.lower(oldest.get(col)) != N.lower(g.surviving.get(col))
         ]
         if overwritten:
             col, was, now = overwritten[0]

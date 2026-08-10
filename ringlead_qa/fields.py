@@ -74,6 +74,8 @@ F_MODIFIED = "modified"
 F_NOTES = "notes"
 F_DESCRIPTION = "description"
 F_UNQUALIFIED = "unqualified_reason"
+F_LEAD_SOURCE = "lead_source"
+F_LEAD_SOURCE_DETAIL = "lead_source_detail"
 
 # Fields shared across every entity type. Values are candidate column labels, tried
 # in order -- the first that exists in the file wins.
@@ -103,6 +105,8 @@ _COMMON = {
     F_LAST_ACTIVITY: ["Last Activity"],
     F_CREATED: ["Created Date"],
     F_MODIFIED: ["Last Modified Date"],
+    F_LEAD_SOURCE: ["Lead Source"],
+    F_LEAD_SOURCE_DETAIL: ["Lead Source Detail"],
     F_NOTES: ["Notes"],
     F_DESCRIPTION: ["Description"],
 }
@@ -243,6 +247,11 @@ SYSTEM_NOISE_LABELS = frozenset({
 
 # Dozens of workflow-bookkeeping timestamps, matched by label prefix.
 SYSTEM_NOISE_LABEL_PREFIXES = ("Date Entered ", "Date Exited ", "Individual Address (")
+
+#: A Lead Source naming an event ("Industry Event", "MinIO Event"). First-touch logic
+#: inverts for these: the latest event someone attended is the useful fact, whereas
+#: the channel they originally arrived through is history.
+EVENT_SOURCE_MARKER = "event"
 
 # --- Funnel position ----------------------------------------------------------
 # Recycle/Non-Buyer are terminal-but-low: a record sitting there is not more advanced

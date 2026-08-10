@@ -42,6 +42,12 @@ SURVIVORSHIP_RULES = {
         "Prefer the most recently updated record, so the survivor points at the "
         "current employer's Account.",
     ),
+    "stale_event_kept": (
+        "Field survivorship — Lead Source Detail on event-sourced records",
+        "For records whose Lead Source is an event, prefer the MOST RECENT record's "
+        "Lead Source Detail. Which event someone last attended is the actionable "
+        "fact; the surrounding first-touch fields stay oldest-wins.",
+    ),
     "stale_title_kept": (
         "Field survivorship — Title",
         "Prefer the most recently updated record.",

@@ -97,11 +97,44 @@ class TestCorrections:
             F.F_ACCOUNT_NAME: "Amazon", F.F_ACCOUNT_ID: "001_AMZN",
             F.F_DOMAIN: "amazon.com",
         })
-        fixes = {c.column: c.value for c in evaluate(group(master, [dup], surv)).corrections}
-        assert fixes[F.F_EMAIL] == "skoparkar@nvidia.com"
-        assert fixes[F.F_ACCOUNT_NAME] == "NVIDIA", "Account must follow the email"
-        assert fixes[F.F_ACCOUNT_ID] == "001_NVDA"
-        assert fixes[F.F_DOMAIN] == "nvidia.com"
+        v = evaluate(group(master, [dup], surv))
+
+        # Two routes to a coherent survivor: override each field, or promote the
+        # record that already holds them all. Whichever the tool picks, the end
+        # state has to agree with itself -- that is the invariant, not the route.
+        if v.master_change:
+            end = v.projected.group.surviving
+            assert end.get(F.F_EMAIL) == "skoparkar@nvidia.com"
+            assert end.get(F.F_ACCOUNT_NAME) == "NVIDIA"
+            assert end.get(F.F_ACCOUNT_ID) == "001_NVDA"
+            assert end.get(F.F_DOMAIN) == "nvidia.com"
+        else:
+            fixes = {c.column: c.value for c in v.corrections}
+            assert fixes[F.F_EMAIL] == "skoparkar@nvidia.com"
+            assert fixes[F.F_ACCOUNT_NAME] == "NVIDIA", "Account must follow the email"
+            assert fixes[F.F_ACCOUNT_ID] == "001_NVDA"
+            assert fixes[F.F_DOMAIN] == "nvidia.com"
+
+    def test_promoting_beats_overriding_the_same_fields_by_hand(self):
+        """Four field overrides sourced from one record is a master change in disguise."""
+        common = {F.F_FULL_NAME: "Jeremiah Anderson", F.F_COMPANY: "Coalfire Federal",
+                  F.F_LINKEDIN: "in/janderson"}
+        master = rec("master", **{**common, F.F_RECORD_ID: "00Q_OLD",
+                                  F.F_EMAIL: "jeremiah.anderson@usdoj.gov",
+                                  F.F_ACCOUNT_NAME: "United States Department of Justice",
+                                  F.F_ACCOUNT_ID: "001_DOJ", F.F_DOMAIN: "usdoj.gov"})
+        dup = rec("duplicate", **{**common, F.F_RECORD_ID: "00Q_NEW",
+                                  F.F_EMAIL: "jeremiah.anderson@coalfirefederal.com",
+                                  F.F_ACCOUNT_NAME: "Coalfirefederal",
+                                  F.F_ACCOUNT_ID: "001_CF", F.F_DOMAIN: "coalfirefederal.com"})
+        surv = rec("surviving", **{**common, F.F_RECORD_ID: "00Q_OLD",
+                                   F.F_EMAIL: "jeremiah.anderson@usdoj.gov",
+                                   F.F_ACCOUNT_NAME: "United States Department of Justice",
+                                   F.F_ACCOUNT_ID: "001_DOJ", F.F_DOMAIN: "usdoj.gov"})
+        v = evaluate(group(master, [dup], surv))
+        assert v.master_change is not None, "promote the current-employer record"
+        assert v.master_change.record.record_id == "00Q_NEW"
+        assert v.projected.group.surviving.get(F.F_ACCOUNT_NAME) == "Coalfirefederal"
 
     def test_agreeing_employer_fields_are_not_restated(self):
         """A correction that changes nothing is noise; only disagreements surface."""
