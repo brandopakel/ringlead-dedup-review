@@ -26,6 +26,26 @@ class TestLinkedIn:
     def test_blank(self):
         assert N.linkedin("") == ""
 
+    def test_urn_form_is_recognised(self):
+        """LinkedIn addresses a profile by vanity slug OR opaque member URN."""
+        assert N.is_linkedin_urn(
+            "https://www.linkedin.com/in/ACwAABEzP9IBnVwlgpt2wic0t7nnxi5ymei3tek")
+        assert not N.is_linkedin_urn("https://www.linkedin.com/in/neil-miller-38278580")
+
+    def test_urn_and_slug_are_not_comparable(self):
+        """The bug this prevents: two forms of one profile read as two people."""
+        assert not N.linkedin_forms_comparable([
+            N.linkedin("linkedin.com/in/ACwAABEzP9IBnVwlgpt2wic0t7nnxi5ymei3tek"),
+            N.linkedin("linkedin.com/in/neil-miller-38278580"),
+        ])
+
+    def test_two_slugs_stay_comparable(self):
+        """Genuinely different vanity slugs must still be judged."""
+        assert N.linkedin_forms_comparable([
+            N.linkedin("linkedin.com/in/maryvarghese"),
+            N.linkedin("linkedin.com/in/mathew-varghese-0b01b4228"),
+        ])
+
 
 class TestPhone:
     def test_formatting_ignored(self):

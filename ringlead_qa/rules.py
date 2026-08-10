@@ -121,6 +121,29 @@ NORMALIZERS = {
     "domain_only": N.domain_only,
 }
 
+#: Signals whose values can be non-comparable rather than merely different.
+COMPARABILITY = {"linkedin": N.linkedin_forms_comparable}
+
+#: Identifiers minted by a third party rather than observed about the person. When
+#: one record is enriched from two different vendor records these disagree without
+#: the people differing, so they are not allowed to declare "different people" on
+#: their own if the group looks like a double import.
+VENDOR_SIGNALS = {F.F_ZI_CONTACT, F.F_ZI_COMPANY, F.F_MOBILE, F.F_PHONE}
+
+
+def same_import(g: Group) -> bool:
+    """Do these records look like one entity loaded twice?
+
+    Identical creation instant plus identical title and company. Salesforce stamps
+    Created Date to the second, so two records sharing it came from one load -- and
+    across the sample export every such group with comparable LinkedIn profiles
+    agreed on identity.
+    """
+    created = {r.get(F.F_CREATED) for r in g.records if r.get(F.F_CREATED)}
+    titles = {N.lower(r.get(F.F_TITLE)) for r in g.records if r.get(F.F_TITLE)}
+    firms = {N.lower(r.get(F.F_COMPANY)) for r in g.records if r.get(F.F_COMPANY)}
+    return len(created) == 1 and len(titles) == 1 and len(firms) == 1 and bool(created)
+
 
 def check_identity(g: Group) -> list[Finding]:
     out: list[Finding] = []
@@ -131,6 +154,9 @@ def check_identity(g: Group) -> list[Finding]:
         vals = [v for v in (fn(r.get(logical)) for r in g.records) if v]
         if len(vals) < 2:
             continue
+        comparable = COMPARABILITY.get(norm_name)
+        if comparable and not comparable(vals):
+            continue  # different address forms for the same thing -- no evidence
         (conflicted if len(set(vals)) > 1 else agreed).append(
             (logical, name, sorted(set(vals)))
         )
@@ -140,7 +166,27 @@ def check_identity(g: Group) -> list[Finding]:
     if len(emails) >= 2 and len(set(emails)) == 1:
         agreed.append((F.F_EMAIL, "email address", [emails[0]]))
 
+    double_import = same_import(g)
     for col, name, vals in conflicted:
+        # A vendor ID disagreeing inside an obvious double import says the vendor
+        # holds two records for one person, not that there are two people.
+        if double_import and col in VENDOR_SIGNALS:
+            out.append(Finding(
+                code="vendor_id_conflict",
+                severity=REVIEW,
+                title="Enrichment IDs disagree, but the records look like one import",
+                detail=(
+                    f"{name.capitalize()} differs, though both records share a "
+                    "creation timestamp, title and company — the hallmark of one "
+                    "person loaded from two vendor records."
+                ),
+                fields=[col],
+                evidence=[
+                    (g.schema.label(col), " vs ".join(vals[:3])),
+                    ("Created", g.master.get(F.F_CREATED)[:19].replace("T", " ")),
+                ],
+            ))
+            continue
         out.append(Finding(
             code="identity_conflict",
             severity=CRITICAL,

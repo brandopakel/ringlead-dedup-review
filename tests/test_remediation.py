@@ -123,6 +123,54 @@ class TestCorrections:
         assert v.corrections == []
 
 
+class TestIdentityCalibration:
+    """Not every disagreement is evidence of two people."""
+
+    STAMP = "2026-07-16T16:34:26.000Z"
+
+    def _pair(self, **overrides):
+        # Merged before splatting: an override may replace a key `common` already
+        # sets, and **a, **b with a shared key is a TypeError.
+        common = {F.F_FULL_NAME: "Neil Miller", F.F_COMPANY: "Lidl",
+                  F.F_TITLE: "Vice President, Finance", F.F_CREATED: self.STAMP}
+        m = rec("master", **{**common, F.F_RECORD_ID: "00Q_M",
+                             F.F_ZI_CONTACT: "12981268506", **overrides.get("master", {})})
+        d = rec("duplicate", **{**common, F.F_RECORD_ID: "00Q_D",
+                                F.F_ZI_CONTACT: "1090824750", **overrides.get("dup", {})})
+        s = rec("surviving", **{**common, F.F_RECORD_ID: "00Q_M"})
+        return group(m, [d], s)
+
+    def test_vendor_ids_disagreeing_inside_one_import_is_not_a_skip(self):
+        """Same instant, title and company: the vendor holds two records, not two people."""
+        v = evaluate(self._pair())
+        assert v.status == "review"
+        assert {f.code for f in v.findings} & {"vendor_id_conflict"}
+        assert "identity_conflict" not in {f.code for f in v.findings}
+
+    def test_differing_creation_instant_restores_the_skip(self):
+        """Without the double-import evidence, disagreeing IDs stand on their own."""
+        v = evaluate(self._pair(dup={F.F_CREATED: "2024-01-02T09:00:00.000Z"}))
+        assert v.status == "skip"
+
+    def test_linkedin_conflict_still_skips_despite_one_import(self):
+        """LinkedIn is the strongest signal; a real slug clash is not explained away."""
+        v = evaluate(self._pair(
+            master={F.F_LINKEDIN: "linkedin.com/in/neil-miller-38278580"},
+            dup={F.F_LINKEDIN: "linkedin.com/in/neilmiller-cfo-99"},
+        ))
+        assert v.status == "skip"
+
+    def test_urn_versus_slug_is_not_a_conflict(self):
+        """Two address forms for one profile must not read as two people."""
+        v = evaluate(self._pair(
+            master={F.F_LINKEDIN: "linkedin.com/in/ACwAABEzP9IBnVwlgpt2wic0t7nnxi5ymei3tek",
+                    F.F_ZI_CONTACT: "111"},
+            dup={F.F_LINKEDIN: "linkedin.com/in/neil-miller-38278580",
+                 F.F_ZI_CONTACT: "111"},
+        ))
+        assert v.status != "skip"
+
+
 class TestMasterChange:
     def test_corroborated_recommendation_wins(self):
         weak = MasterChange(record=rec("duplicate", **{F.F_RECORD_ID: "00Q_WEAK"}),

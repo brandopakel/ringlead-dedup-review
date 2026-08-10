@@ -106,6 +106,26 @@ def linkedin(value) -> str:
     return re.sub(r"^(in|pub)/", "", v)
 
 
+#: LinkedIn's opaque member URN form, e.g. /in/ACwAABEzP9IBnVwlgpt2wic0t7nnxi5ymei3tek
+_LINKEDIN_URN = re.compile(r"^ac[o-w]a[a-z0-9_-]{10,}$", re.I)
+
+
+def is_linkedin_urn(value) -> bool:
+    return bool(_LINKEDIN_URN.match(linkedin(value)))
+
+
+def linkedin_forms_comparable(values) -> bool:
+    """False when the values mix URN and vanity-slug forms.
+
+    A profile can be addressed either way, so "ACwAABEzP9IB..." and
+    "neil-miller-38278580" may well be the same person -- string comparison cannot
+    tell. Treating that as a conflict manufactures false evidence of two people,
+    so the signal is discarded instead.
+    """
+    forms = {"urn" if _LINKEDIN_URN.match(v) else "slug" for v in values if v}
+    return len(forms) < 2
+
+
 def person_name(value) -> str:
     """Letters only, so "Bhavin Dave" and "Dave, Bhavin" normalize toward each other."""
     return re.sub(r"[^a-z]", "", lower(value))
