@@ -80,6 +80,19 @@ def email_localpart(value) -> str:
     return v.split("@")[0] if v else ""
 
 
+def localpart_matches_name(value, full_name) -> bool:
+    """Does an address's local part spell out this person's name?
+
+    "siddartha.reddy@anthem.com" and "siddartha.reddy@capitalone.com" share a local
+    part that is demonstrably this person's name, which is meaningful corroboration
+    across a job change. A shared "info" or "jsmith" is not, so the local part has to
+    contain a name token of length 3+ to count.
+    """
+    parts = {p for p in re.split(r"[^a-z0-9]+", email_localpart(value)) if len(p) > 2}
+    toks = {t for t in name_tokens(full_name) if len(t) > 2}
+    return bool(parts and toks and parts & toks)
+
+
 def is_free_email(value) -> bool:
     return email_domain(value) in FREE_EMAIL_DOMAINS
 

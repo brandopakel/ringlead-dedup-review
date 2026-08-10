@@ -117,7 +117,7 @@ _COMMON = {
 class EntitySpec:
     prefix: str
     fields: dict[str, list[str]]
-    identity: list[tuple[str, str, str]]  # (logical, normalizer, human name)
+    identity: list[tuple[str, str, str, str]]  # (logical, normalizer, name, strength)
     historical: list[str]
     noise_labels: frozenset[str] = frozenset()
 
@@ -136,9 +136,12 @@ LEAD = EntitySpec(
         F_UNQUALIFIED: ["Unqualified Reason"],
     },
     identity=[
-        (F_LINKEDIN, "linkedin", "LinkedIn profile"),
-        (F_ZI_CONTACT, "lower", "ZoomInfo Contact ID"),
-        (F_MOBILE, "phone_digits", "mobile number"),
+        # "key" identifiers name one person and are minted once; "weak" ones are
+        # attributes a person can legitimately have two of, so a disagreement there
+        # is a question rather than a verdict.
+        (F_LINKEDIN, "linkedin", "LinkedIn profile", "key"),
+        (F_ZI_CONTACT, "lower", "ZoomInfo Contact ID", "key"),
+        (F_MOBILE, "phone_digits", "mobile number", "weak"),
     ],
     historical=["Lead Source", "Lead Source Detail", "Original Source",
                 "First Touch Conversion Action", "Inbound Date"],
@@ -159,9 +162,9 @@ CONTACT = EntitySpec(
         F_UNQUALIFIED: ["Unqualified Reason"],
     },
     identity=[
-        (F_LINKEDIN, "linkedin", "LinkedIn profile"),
-        (F_ZI_CONTACT, "lower", "ZoomInfo Contact ID"),
-        (F_MOBILE, "phone_digits", "mobile number"),
+        (F_LINKEDIN, "linkedin", "LinkedIn profile", "key"),
+        (F_ZI_CONTACT, "lower", "ZoomInfo Contact ID", "key"),
+        (F_MOBILE, "phone_digits", "mobile number", "weak"),
     ],
     historical=["Lead Source", "Lead Source Detail", "Original Source",
                 "First Touch Conversion Action", "Inbound Date"],
@@ -186,9 +189,9 @@ ACCOUNT = EntitySpec(
     identity=[
         # An Account has no person to identify. Sameness rests on the company's own
         # identifiers: its web domain and its enrichment IDs.
-        (F_WEBSITE, "domain_only", "website domain"),
-        (F_ZI_COMPANY, "lower", "ZoomInfo Company ID"),
-        (F_PHONE, "phone_digits", "phone number"),
+        (F_WEBSITE, "domain_only", "website domain", "key"),
+        (F_ZI_COMPANY, "lower", "ZoomInfo Company ID", "key"),
+        (F_PHONE, "phone_digits", "phone number", "weak"),
     ],
     historical=["Lead Source", "Original Source", "First Touch Conversion Action"],
 )

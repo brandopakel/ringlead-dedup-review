@@ -149,7 +149,7 @@ def check_identity(g: Group) -> list[Finding]:
     out: list[Finding] = []
 
     agreed, conflicted = [], []
-    for logical, norm_name, name in g.schema.identity_signals:
+    for logical, norm_name, name, strength in g.schema.identity_signals:
         fn = NORMALIZERS[norm_name]
         vals = [v for v in (fn(r.get(logical)) for r in g.records) if v]
         if len(vals) < 2:
@@ -158,18 +158,75 @@ def check_identity(g: Group) -> list[Finding]:
         if comparable and not comparable(vals):
             continue  # different address forms for the same thing -- no evidence
         (conflicted if len(set(vals)) > 1 else agreed).append(
-            (logical, name, sorted(set(vals)))
+            (logical, name, sorted(set(vals)), strength)
         )
 
-    # An exact email match is also proof, though rarer here than the fields above.
+    # Phone numbers are compared as a set across Mobile and Phone: the same number
+    # routinely lands in Mobile on one record and Phone on the other, and matching
+    # field-to-field reads that as two different people.
+    def numbers(rec):
+        return {d for d in (N.phone_digits(rec.get(k))
+                            for k in (F.F_MOBILE, F.F_PHONE)) if d}
+    sets = [numbers(r) for r in g.records]
+    shared = set.intersection(*sets) if all(sets) else set()
+    # ...but only a personal line proves anything. Two colleagues share a company
+    # switchboard, so a shared number counts only when it is somebody's Mobile.
+    mobiles = {d for d in (N.phone_digits(r.get(F.F_MOBILE)) for r in g.records) if d}
+    shared &= mobiles
+    if shared:
+        agreed.append((F.F_PHONE, "mobile number", sorted(shared), "weak"))
+
+    # An exact email match is proof outright -- an address identifies one mailbox.
     emails = [e for e in (N.email(r.get(F.F_EMAIL)) for r in g.records) if e]
     if len(emails) >= 2 and len(set(emails)) == 1:
         agreed.append((F.F_EMAIL, "email address", [emails[0]]))
+    elif len(emails) >= 2:
+        # Across a job change the domain necessarily differs, but a local part that
+        # spells out this person's name carrying over is real corroboration.
+        locals_ = {N.email_localpart(e) for e in emails}
+        name = g.surviving.get(F.F_FULL_NAME)
+        if len(locals_) == 1 and N.localpart_matches_name(emails[0], name):
+            agreed.append((F.F_EMAIL, "email name", sorted(emails)))
 
     double_import = same_import(g)
-    for col, name, vals in conflicted:
+    for col, name, vals, strength in conflicted:
+        # Something else about these records already matched. One signal disagreeing
+        # against positive evidence is a contradiction for a human to resolve, not
+        # grounds to declare two people -- and never grounds to skip a real merge.
+        if agreed:
+            out.append(Finding(
+                code="identity_mixed",
+                severity=REVIEW,
+                title="Identifiers disagree, but others match",
+                detail=(
+                    f"{name.capitalize()} differs, while the "
+                    f"{agreed[0][1]} matches across records."
+                ),
+                fields=[col],
+                evidence=[
+                    (g.schema.label(col), " vs ".join(vals[:3])),
+                    ("Matches", " / ".join(agreed[0][2][:2])),
+                ],
+            ))
+            continue
         # A vendor ID disagreeing inside an obvious double import says the vendor
         # holds two records for one person, not that there are two people.
+        # A weak attribute disagreeing on its own is a question, not a verdict: a
+        # person can hold two numbers, whereas a LinkedIn profile or vendor contact
+        # ID names one person and is minted once.
+        if strength == "weak":
+            out.append(Finding(
+                code="weak_identity_conflict",
+                severity=REVIEW,
+                title=f"{name.capitalize()} differs — check before merging",
+                detail=(
+                    "No stronger identifier is available either way, and one person "
+                    "can legitimately have two of these."
+                ),
+                fields=[col],
+                evidence=[(g.schema.label(col), " vs ".join(vals[:3]))],
+            ))
+            continue
         if double_import and col in VENDOR_SIGNALS:
             out.append(Finding(
                 code="vendor_id_conflict",

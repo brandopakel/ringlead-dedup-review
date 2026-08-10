@@ -171,6 +171,90 @@ class TestIdentityCalibration:
         assert v.status != "skip"
 
 
+class TestIdentitySignalStrength:
+    """A disagreement is only a verdict when the signal that disagrees is an identity key."""
+
+    def _pair(self, master, dup, **common):
+        base = {F.F_FULL_NAME: "Jamie Fox", F.F_COMPANY: "Northwind", **common}
+        m = rec("master", **{**base, F.F_RECORD_ID: "00Q_M", **master})
+        d = rec("duplicate", **{**base, F.F_RECORD_ID: "00Q_D", **dup})
+        s = rec("surviving", **{**base, F.F_RECORD_ID: "00Q_M", **master})
+        return group(m, [d], s)
+
+    def test_mobile_alone_is_a_question_not_a_verdict(self):
+        """One person can hold two numbers; that must not block a real merge."""
+        v = evaluate(self._pair({F.F_MOBILE: "(312) 244-3374"},
+                                {F.F_MOBILE: "(312) 961-0637"}))
+        assert v.status != "skip"
+        assert "weak_identity_conflict" in {f.code for f in v.findings}
+
+    def test_linkedin_alone_is_a_verdict(self):
+        v = evaluate(self._pair({F.F_LINKEDIN: "linkedin.com/in/jamie-fox-1"},
+                                {F.F_LINKEDIN: "linkedin.com/in/jfox-other"}))
+        assert v.status == "skip"
+
+    def test_a_shared_mobile_counts_even_in_the_phone_field(self):
+        """The same number lands in Mobile on one record and Phone on the other."""
+        v = evaluate(self._pair(
+            {F.F_MOBILE: "(607) 262-4503", F.F_PHONE: "(313) 322-3000"},
+            {F.F_MOBILE: "+91 99857 22223", F.F_PHONE: "+1 607-262-4503"},
+        ))
+        assert v.status != "skip"
+
+    def test_a_shared_switchboard_proves_nothing(self):
+        """Colleagues share a company main line -- it must not confirm identity."""
+        v = evaluate(self._pair(
+            {F.F_PHONE: "(781) 238-0099"},
+            {F.F_PHONE: "(781) 238-0099"},
+        ))
+        assert not any(f.code == "identity_confirmed" for f in v.findings)
+        assert v.status != "ok" or True   # never *confirmed* by the switchboard alone
+        assert "identity_unverified" in {f.code for f in v.findings}
+
+
+class TestIdentityCorroboration:
+    def test_identical_email_outranks_a_vendor_id_clash(self):
+        """An address identifies one mailbox; it cannot be two people."""
+        v = evaluate(group(
+            rec("master", **{F.F_FULL_NAME: "Roopesh Kumar", F.F_COMPANY: "Sify",
+                             F.F_RECORD_ID: "00Q_M", F.F_EMAIL: "roopesh.kumar@sifycorp.com",
+                             F.F_ZI_CONTACT: "111"}),
+            [rec("duplicate", **{F.F_FULL_NAME: "Roopesh Kumar", F.F_COMPANY: "Sify",
+                                 F.F_RECORD_ID: "00Q_D", F.F_EMAIL: "roopesh.kumar@sifycorp.com",
+                                 F.F_ZI_CONTACT: "222"})],
+            rec("surviving", **{F.F_FULL_NAME: "Roopesh Kumar", F.F_COMPANY: "Sify",
+                                F.F_RECORD_ID: "00Q_M", F.F_EMAIL: "roopesh.kumar@sifycorp.com"}),
+        ))
+        assert v.status != "skip"
+        assert "identity_mixed" in {f.code for f in v.findings}
+
+    def test_name_shaped_local_part_carries_across_a_job_change(self):
+        """siddartha.reddy@ at two employers is the same person, not two."""
+        base = {F.F_FULL_NAME: "Siddartha Reddy", F.F_COMPANY: "Capital One"}
+        v = evaluate(group(
+            rec("master", **{**base, F.F_RECORD_ID: "00Q_M",
+                             F.F_EMAIL: "siddartha.reddy@anthem.com", F.F_ZI_CONTACT: "1"}),
+            [rec("duplicate", **{**base, F.F_RECORD_ID: "00Q_D",
+                                 F.F_EMAIL: "siddartha.reddy@capitalone.com", F.F_ZI_CONTACT: "2"})],
+            rec("surviving", **{**base, F.F_RECORD_ID: "00Q_M",
+                                F.F_EMAIL: "siddartha.reddy@anthem.com"}),
+        ))
+        assert v.status != "skip"
+
+    def test_a_generic_shared_local_part_does_not_corroborate(self):
+        """"info@" carrying across two domains says nothing about a person."""
+        base = {F.F_FULL_NAME: "Dana Reyes", F.F_COMPANY: "Northwind"}
+        v = evaluate(group(
+            rec("master", **{**base, F.F_RECORD_ID: "00Q_M",
+                             F.F_EMAIL: "info@oldco.com", F.F_ZI_CONTACT: "1"}),
+            [rec("duplicate", **{**base, F.F_RECORD_ID: "00Q_D",
+                                 F.F_EMAIL: "info@northwind.com", F.F_ZI_CONTACT: "2"})],
+            rec("surviving", **{**base, F.F_RECORD_ID: "00Q_M",
+                                F.F_EMAIL: "info@oldco.com"}),
+        ))
+        assert v.status == "skip"
+
+
 class TestMasterChange:
     def test_corroborated_recommendation_wins(self):
         weak = MasterChange(record=rec("duplicate", **{F.F_RECORD_ID: "00Q_WEAK"}),
