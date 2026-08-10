@@ -1,0 +1,399 @@
+<title>How the RingLead merge QA tool decides</title>
+<style>
+:root{
+  --ground:#fbfbfc; --surface:#ffffff; --sunk:#f4f5f7;
+  --ink:#13161b; --ink2:#565e6a; --ink3:#8b939f;
+  --rule:#e2e5ea; --rule2:#eef0f3;
+  --keep:#0d7a5f; --keep-bg:#e6f4ef;
+  --lost:#bf2a56; --lost-bg:#fceef2;
+  --should:#3a4ba8; --should-bg:#ecEEfa;
+  --serif:ui-serif,"New York","Iowan Old Style",Georgia,serif;
+  --sans:ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --ground:#0b0d10; --surface:#12151a; --sunk:#171b21;
+  --ink:#e8eaee; --ink2:#98a1ae; --ink3:#6b7480;
+  --rule:#232830; --rule2:#1b1f26;
+  --keep:#3fbc95; --keep-bg:#0e2b23;
+  --lost:#f2789f; --lost-bg:#2e1220;
+  --should:#8b9cf0; --should-bg:#191d33;
+}}
+:root[data-theme="dark"]{
+  --ground:#0b0d10; --surface:#12151a; --sunk:#171b21;
+  --ink:#e8eaee; --ink2:#98a1ae; --ink3:#6b7480;
+  --rule:#232830; --rule2:#1b1f26;
+  --keep:#3fbc95; --keep-bg:#0e2b23;
+  --lost:#f2789f; --lost-bg:#2e1220;
+  --should:#8b9cf0; --should-bg:#191d33;
+}
+*{box-sizing:border-box}
+body{
+  margin:0;background:var(--ground);color:var(--ink);
+  font:17px/1.7 var(--serif);
+  -webkit-font-smoothing:antialiased;
+}
+.page{max-width:940px;margin:0 auto;padding:0 24px 120px}
+.col{max-width:680px}
+h1,h2,h3{text-wrap:balance}
+h1{font-size:2.4rem;line-height:1.15;letter-spacing:-.022em;font-weight:600;margin:0 0 18px}
+h2{font-size:1.45rem;line-height:1.25;letter-spacing:-.015em;font-weight:600;
+   margin:0 0 14px}
+h3{font-family:var(--sans);font-size:.75rem;font-weight:600;letter-spacing:.09em;
+   text-transform:uppercase;color:var(--ink3);margin:0 0 10px}
+p{margin:0 0 18px}
+a{color:var(--should)}
+strong{font-weight:640}
+code{font-family:var(--mono);font-size:.83em;background:var(--sunk);
+  padding:.1em .38em;border-radius:4px;border:1px solid var(--rule2)}
+
+/* ---- masthead ---- */
+header{padding:76px 0 0}
+.eyebrow{font-family:var(--sans);font-size:.75rem;letter-spacing:.11em;
+  text-transform:uppercase;color:var(--ink3);margin:0 0 20px}
+.lede{font-size:1.2rem;line-height:1.6;color:var(--ink2);margin:0 0 34px;max-width:62ch}
+
+/* the numbers that justify the tool's existence */
+.result{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;
+  font-family:var(--sans);padding:22px 0;
+  border-top:1px solid var(--rule);border-bottom:1px solid var(--rule)}
+.result .big{font-size:2.6rem;font-weight:650;letter-spacing:-.03em;line-height:1;
+  font-variant-numeric:tabular-nums}
+.result .was{font-size:1.5rem;color:var(--ink3);text-decoration:line-through;
+  text-decoration-thickness:1.5px;font-variant-numeric:tabular-nums}
+.result .cap{font-size:.875rem;color:var(--ink2);line-height:1.45}
+
+section{padding:56px 0 0}
+.rule{height:1px;background:var(--rule);border:0;margin:56px 0 0}
+
+/* ---- merge diff: the page's structural device ---- */
+.diff{border:1px solid var(--rule);border-radius:10px;background:var(--surface);
+  overflow:hidden;margin:0 0 22px;font-family:var(--sans);font-size:.875rem}
+.diff-h{padding:11px 16px;border-bottom:1px solid var(--rule);background:var(--sunk);
+  font-size:.75rem;letter-spacing:.07em;text-transform:uppercase;color:var(--ink3);
+  display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.diff-b{padding:4px 0}
+.row{display:grid;grid-template-columns:132px 1fr;gap:6px 16px;padding:9px 16px;
+  align-items:baseline}
+.row+.row{border-top:1px solid var(--rule2)}
+.row .k{font-size:.75rem;letter-spacing:.05em;text-transform:uppercase;color:var(--ink3)}
+.row .v{font-family:var(--mono);font-size:.8125rem;overflow-wrap:anywhere}
+.v.keep{color:var(--keep)}
+.v.lost{color:var(--lost);text-decoration:line-through;
+  text-decoration-color:color-mix(in srgb,var(--lost) 45%,transparent)}
+.v.should{color:var(--should);font-weight:600}
+.tag{display:inline-block;font-family:var(--sans);font-size:.6875rem;font-weight:600;
+  letter-spacing:.05em;text-transform:uppercase;padding:2px 7px;border-radius:999px;
+  margin-left:8px;vertical-align:1px}
+.tag.keep{background:var(--keep-bg);color:var(--keep)}
+.tag.lost{background:var(--lost-bg);color:var(--lost)}
+.tag.should{background:var(--should-bg);color:var(--should)}
+
+/* ---- data table ---- */
+.tw{overflow-x:auto;margin:0 0 22px;border:1px solid var(--rule);border-radius:10px}
+table{border-collapse:collapse;width:100%;font-family:var(--sans);font-size:.875rem;
+  font-variant-numeric:tabular-nums;background:var(--surface)}
+th,td{text-align:left;padding:10px 16px;border-bottom:1px solid var(--rule2);
+  vertical-align:top}
+thead th{background:var(--sunk);font-size:.72rem;letter-spacing:.07em;
+  text-transform:uppercase;color:var(--ink3);font-weight:600;white-space:nowrap}
+tbody tr:last-child td{border-bottom:0}
+td.num{text-align:right;white-space:nowrap;font-weight:600}
+td.num.good{color:var(--keep)} td.num.bad{color:var(--lost)}
+caption{caption-side:bottom;text-align:left;padding:11px 16px;font-family:var(--sans);
+  font-size:.8125rem;color:var(--ink3);border-top:1px solid var(--rule2)}
+
+/* ---- callout ---- */
+.note{border-left:2px solid var(--should);padding:2px 0 2px 20px;margin:0 0 22px;
+  color:var(--ink2)}
+.note b{color:var(--ink)}
+
+/* ---- severity legend ---- */
+.sev{display:grid;gap:1px;background:var(--rule);border:1px solid var(--rule);
+  border-radius:10px;overflow:hidden;margin:0 0 22px;font-family:var(--sans)}
+.sev div{background:var(--surface);padding:14px 16px;display:grid;
+  grid-template-columns:104px 1fr;gap:14px;align-items:baseline;font-size:.875rem}
+.sev dt{font-size:.75rem;letter-spacing:.06em;text-transform:uppercase;font-weight:600}
+.sev .c1 dt{color:var(--lost)} .sev .c2 dt{color:#b57614}
+.sev .c3 dt{color:var(--ink3)}
+.sev dd{margin:0;color:var(--ink2)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .sev .c2 dt{color:#e0a33a}}
+:root[data-theme="dark"] .sev .c2 dt{color:#e0a33a}
+
+pre{font-family:var(--mono);font-size:.8125rem;line-height:1.65;background:var(--surface);
+  border:1px solid var(--rule);border-radius:10px;padding:16px;overflow-x:auto;margin:0 0 22px}
+ol,ul{margin:0 0 18px;padding-left:22px}
+li{margin-bottom:8px}
+footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--rule);
+  font-family:var(--sans);font-size:.8125rem;color:var(--ink3)}
+@media (max-width:640px){
+  h1{font-size:1.9rem}
+  .row{grid-template-columns:1fr;gap:2px}
+  .sev div{grid-template-columns:1fr;gap:4px}
+}
+</style>
+
+<div class="page">
+
+<header class="col">
+  <p class="eyebrow">Internal tooling · Salesforce data quality</p>
+  <h1>How the merge QA tool decides what you have to look at</h1>
+  <p class="lede">
+    Every week a RingLead deduplication resolution produces a few hundred groups of
+    suspected duplicate Leads, and someone has to confirm each merge is right before it
+    runs. This tool reads the resolution export and answers one question per group:
+    does a human need to open this?
+  </p>
+</header>
+
+<div class="result col">
+  <span class="big">222</span>
+  <span class="was">460</span>
+  <span class="cap">groups needing review, from a real run.<br>238 were cleared automatically.</span>
+</div>
+
+<section class="col">
+  <h2>The finding the whole tool is built on</h2>
+  <p>
+    In that run, <strong>293 of 460 groups had completely different corporate email
+    domains</strong> — the two records looked like they worked at different companies.
+    That sounds like the matching is broken. It isn't.
+  </p>
+  <p>
+    ZoomInfo enrichment overwrites <code>Company</code> and <code>Title</code> on every
+    record with the person's <em>current</em> employer, while <code>Email</code>,
+    <code>Domain</code> and the Account link stay frozen at whatever job they were
+    captured under. So name-and-company matching works, and a mismatched email domain is
+    normal rather than suspicious.
+  </p>
+  <p>
+    That single fact rules out the obvious check. Flagging every domain mismatch would
+    flag 64% of the file and save nobody any time.
+  </p>
+</section>
+
+<hr class="rule">
+
+<section>
+  <div class="col">
+    <h2>Question one: is this actually one person?</h2>
+    <p>
+      Since name and company can't settle it, identity rests on evidence that survives a
+      job change. Three fields carry it, and they agree far more often than they conflict.
+    </p>
+  </div>
+
+  <div class="tw">
+    <table>
+      <caption>Groups where two or more records both carry the field, from the same run.</caption>
+      <thead>
+        <tr><th>Signal</th><th style="text-align:right">Agree</th>
+            <th style="text-align:right">Disagree</th><th>Verdict</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>LinkedIn profile</td><td class="num good">374</td><td class="num bad">4</td>
+            <td>Strongest single signal</td></tr>
+        <tr><td>ZoomInfo Contact ID</td><td class="num good">389</td><td class="num bad">6</td>
+            <td>Survives job changes by design</td></tr>
+        <tr><td>Mobile number</td><td class="num good">323</td><td class="num bad">13</td>
+            <td>Personal line, follows the person</td></tr>
+        <tr><td>Phone</td><td class="num">143</td><td class="num bad">213</td>
+            <td><strong>Not used</strong> — company switchboard, changes with the job</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="col">
+    <p>
+      When any of those agree across records, the group is confirmed as one person. When
+      one actively <em>disagrees</em>, the group is flagged as possibly two different
+      people who share a name. When none are present at all, the group is flagged as
+      unverifiable — the tool will not guess.
+    </p>
+    <div class="note">
+      <b>Why Phone is excluded.</b> It disagreed in 213 of 356 groups, because it is
+      usually the company's main line. Including it would have produced hundreds of false
+      alarms while adding nothing the other three don't already say.
+    </div>
+  </div>
+</section>
+
+<hr class="rule">
+
+<section>
+  <div class="col">
+    <h2>Question two: is the merge output right?</h2>
+    <p>
+      Separately from identity, the tool checks the merge preview itself. The most common
+      defect: the surviving record keeps an email that doesn't belong to the employer it
+      claims to work for.
+    </p>
+  </div>
+
+  <div class="diff">
+    <div class="diff-h">
+      <span>Group 4820001234 · illustrative example</span>
+      <span>Needs a fix</span>
+    </div>
+    <div class="diff-b">
+      <div class="row"><span class="k">Company</span>
+        <span class="v">Northwind Logistics</span></div>
+      <div class="row"><span class="k">After merge</span>
+        <span class="v lost">d.whitfield@oldcarrier.com<span class="tag lost">kept, but stale</span></span></div>
+      <div class="row"><span class="k">Discarded</span>
+        <span class="v keep">dwhitfield@northwind-logistics.com<span class="tag keep">matches employer</span></span></div>
+      <div class="row"><span class="k">Should be</span>
+        <span class="v should">dwhitfield@northwind-logistics.com<span class="tag should">tool's recommendation</span></span></div>
+    </div>
+  </div>
+
+  <div class="col">
+    <p>
+      This fired on <strong>102 groups</strong>. The tool also checks whether the merge
+      keeps an outdated job title, points at a former employer's Account, demotes the
+      lead's funnel stage, overwrites first-touch attribution, or hands the record to a
+      deactivated user.
+    </p>
+    <div class="note">
+      <b>"After merge" is a prediction, not a target.</b> RingLead's own column shows what
+      <em>will</em> happen, defects included. Where the correct value can be derived from
+      the data, the report states it separately as <span style="color:var(--should);font-weight:600">Should
+      be</span>. Where it can't — a possible false match, a master choice needing judgement —
+      no target is offered, because a confident guess would be worse than silence.
+    </div>
+  </div>
+</section>
+
+<hr class="rule">
+
+<section>
+  <div class="col">
+    <h2>How something earns a place in the queue</h2>
+    <p>Findings come in three severities, and only the first two send a group to review.</p>
+  </div>
+
+  <div class="sev col">
+    <div class="c1"><dt>Critical</dt><dd>Demonstrably wrong output. The data names both
+      the defect and the correct value.</dd></div>
+    <div class="c2"><dt>Review</dt><dd>Can't be settled from the data. A person has to
+      decide.</dd></div>
+    <div class="c3"><dt>Contributor</dt><dd>Suspicious but common. Shown as context; only
+      matters stacked with others.</dd></div>
+  </div>
+
+  <div class="col">
+    <p>
+      The discipline that keeps the queue small is a single rule:
+      <strong>a contributor firing on more than a quarter of the file is describing the
+      routine shape of a merge, not evidence of a problem</strong> — so it carries zero
+      weight. It still displays, but it can never push a group into the queue on its own.
+    </p>
+    <p>
+      In the sample run that zeroed four signals that each looked meaningful in isolation:
+      ownership consolidating (250 of 460 groups), duplicates on different Accounts (160),
+      first-touch attribution overwritten (169), and high-value fields dropped (135).
+      Without that rule the queue swallowed 57% of the file instead of 48%.
+    </p>
+  </div>
+</section>
+
+<hr class="rule">
+
+<section>
+  <div class="col">
+    <h2>What a run produces</h2>
+    <p>Four files, aimed at three different people.</p>
+  </div>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>File</th><th>For</th><th>What it's for</th></tr></thead>
+      <tbody>
+        <tr><td><code>_qa.html</code></td><td>the reviewer</td>
+            <td>The review queue, with per-group evidence and recommended values. Progress
+                is saved locally, so the queue can be worked across sessions.</td></tr>
+        <tr><td><code>_survivorship_changes.md</code></td><td>whoever owns the RingLead criteria</td>
+            <td>Settings to change once, ranked by how many groups each clears. Usually the
+                highest-leverage output — most defects collapse into a handful of rule changes.</td></tr>
+        <tr><td><code>_master_changes.csv</code></td><td>whoever owns the RingLead criteria</td>
+            <td>Groups where a different record should be the master. Applied in RingLead
+                <em>before</em> merging.</td></tr>
+        <tr><td><code>_corrections.csv</code></td><td>whoever has Salesforce write access</td>
+            <td>Field values to correct after the merge runs, Data Loader-shaped, each new
+                value beside the one it replaces.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="col">
+    <h3>These two are sequenced, not parallel</h3>
+    <p>
+      A correction edits a field on the record that survives. A master change alters
+      <em>which record survives</em> — so the surviving record's ID changes, and any field
+      correction computed against the old preview becomes wrong. Groups needing a new
+      master are deliberately withheld from the correction sheet; applying them would
+      write values onto a record that is about to be deleted.
+    </p>
+    <ol>
+      <li>Apply the master changes in RingLead.</li>
+      <li>Re-export the resolution and re-run the tool.</li>
+      <li>Apply the correction sheet after the merge.</li>
+    </ol>
+  </div>
+</section>
+
+<hr class="rule">
+
+<section class="col">
+  <h2>Checking it yourself</h2>
+  <p>
+    Nothing here is a black box, and none of it needs Salesforce or RingLead credentials —
+    the tool only ever reads an exported CSV.
+  </p>
+<pre>python main.py --open      # newest export in data/, opens the report
+python -m pytest           # the comparison logic that decides auto-approval</pre>
+  <p>Where the decisions live:</p>
+  <ul>
+    <li><code>ringlead_qa/rules.py</code> — every check, its severity, and the review
+      threshold. Each rule is a small function with the reasoning in a comment above it.</li>
+    <li><code>ringlead_qa/fields.py</code> — which fields count as high-value, which are
+      routing, which are system noise that can never count as data loss, and the funnel
+      ordering used to detect a demotion.</li>
+    <li><code>ringlead_qa/normalize.py</code> — how two values are judged equal. This is
+      where a company like <code>Meridian Holdings</code> is matched to
+      <code>meridian.com</code>, and it's covered by tests, because a change here silently
+      changes which groups get auto-approved.</li>
+  </ul>
+  <div class="note">
+    <b>The most useful thing to audit</b> is the list of auto-approved groups, not the
+    flagged ones. A false alarm costs a minute; a group wrongly cleared merges two people
+    into one record. A hand-audit of a random sample found every cleared group had matching
+    LinkedIn, ZoomInfo ID <em>and</em> mobile across its records.
+  </div>
+</section>
+
+<hr class="rule">
+
+<section class="col">
+  <h2>Known limits</h2>
+  <ul>
+    <li><strong>Leads only so far.</strong> Account and Contact resolutions use the same
+      export structure but different column names, so the field catalog needs an entry per
+      entity type before any of the rules mean anything there.</li>
+    <li><strong>Domain aliases that share no letters</strong> with the company name can't
+      be inferred — a company trading under an unrelated legacy domain surfaces as a review
+      item rather than being silently matched.</li>
+    <li><strong>Title freshness</strong> relies on enrichment dates as a recency proxy. A
+      record that was never enriched can't win a freshness comparison.</li>
+    <li><strong>Recency is applied per field class, not globally.</strong> Current-state
+      fields take the freshest value; history fields such as Lead Source take the oldest.
+      Treating recency as universally correct would flag 316 of 460 groups.</li>
+  </ul>
+</section>
+
+<footer class="col">
+  Examples on this page are synthetic. No customer records leave the machine the tool runs on —
+  exports, reports and correction sheets are all git-ignored.
+</footer>
+
+</div>
