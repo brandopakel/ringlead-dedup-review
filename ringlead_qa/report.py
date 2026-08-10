@@ -24,29 +24,6 @@ from .rules import Verdict
 
 STATUS_LABEL = {"critical": "Fix", "review": "Review", "ok": "Clean"}
 
-# Patterns worth naming once at the top rather than 100 times in the queue: if a
-# finding fires on a large share of groups it is a rule problem, not 100 mistakes.
-SYSTEMIC_ADVICE = {
-    "stale_email_kept":
-        "Set Email survivorship to prefer the address whose domain matches Company, "
-        "rather than always taking the master's value.",
-    "master_owner_inactive":
-        "Add “owner is active” as a master-selection criterion so leads stop landing "
-        "with departed reps.",
-    "master_stale":
-        "Weight Most Recent Activity Date more heavily when choosing the master.",
-    "identity_unverified":
-        "These match on name and company alone. Consider requiring a second identifier "
-        "— LinkedIn, ZoomInfo Contact ID, or mobile — in the match criteria.",
-    "stale_title_kept":
-        "Set Title survivorship to prefer the most recently updated record.",
-    "stale_account_link":
-        "Set Account survivorship to prefer the most recently updated record.",
-    "original_source_overwritten":
-        "Set Lead Source and Lead Source Detail survivorship to prefer the OLDEST "
-        "record — first-touch attribution is history, not current state.",
-}
-
 STYLES = """
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%}
@@ -516,18 +493,6 @@ def render(verdicts: list[Verdict], *, source: str, total_rows: int) -> str:
     total = len(verdicts) or 1
     code_counts = Counter(f.code for v in verdicts for f in v.findings if v.needs_review)
 
-    systemic = "".join(
-        f'<div class="sys"><span class="cnt">{n}</span><span><b>{_esc(code)}</b>'
-        f'<span class="adv">{_esc(SYSTEMIC_ADVICE[code])}</span></span></div>'
-        for code, n in code_counts.most_common()
-        if code in SYSTEMIC_ADVICE and n >= 15
-    )
-    systemic_panel = (
-        '<div class="panel"><h2>Systemic patterns</h2>'
-        '<p class="note">These repeat across many groups. Changing the survivorship rule '
-        'in RingLead clears the whole bucket at once — cheaper than fixing the groups.</p>'
-        f"{systemic}</div>" if systemic else ""
-    )
 
     filters = "".join(
         f'<button class="btn outline" data-kind="code" data-val="{_esc(c)}">'
@@ -567,7 +532,6 @@ def render(verdicts: list[Verdict], *, source: str, total_rows: int) -> str:
   <div class="card"><div class="n">{round(counts['ok'] / total * 100)}%</div><div class="l">Of the file skipped</div></div>
 </div>
 
-{systemic_panel}
 
 <div class="bar">
   <button class="btn" data-kind="status" data-val="all" aria-pressed="true">All <span class="cnt">{len(verdicts)}</span></button>
