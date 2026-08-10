@@ -68,6 +68,54 @@ class TestCorrections:
         ])
         assert [c.value for c in v.corrections] == ["right@x.com"]
 
+    def test_employer_fields_move_together(self):
+        """An NVIDIA email must not be recommended alongside an Amazon Account.
+
+        Email, Account and Domain all describe one thing -- where the person works
+        now. Deciding them by different tests once produced an incoherent survivor,
+        which is what this pins.
+        """
+        common = {F.F_FULL_NAME: "Shruti Koparkar", F.F_COMPANY: "NVIDIA",
+                  F.F_LINKEDIN: "in/skoparkar"}
+        master = rec("master", **common, **{
+            F.F_RECORD_ID: "00Q_M", F.F_EMAIL: "koparkars@amazon.com",
+            F.F_ACCOUNT_NAME: "Amazon", F.F_ACCOUNT_ID: "001_AMZN",
+            F.F_DOMAIN: "amazon.com",
+            # The stale record is also the freshest, so a recency-based account rule
+            # stays silent here -- that is exactly how the two rules disagreed.
+            F.F_MODIFIED: "2026-07-30T00:00:00.000Z",
+        })
+        dup = rec("duplicate", **common, **{
+            F.F_RECORD_ID: "00Q_D", F.F_EMAIL: "skoparkar@nvidia.com",
+            F.F_ACCOUNT_NAME: "NVIDIA", F.F_ACCOUNT_ID: "001_NVDA",
+            F.F_DOMAIN: "nvidia.com",
+            F.F_MODIFIED: "2026-06-26T00:00:00.000Z",
+        })
+        surv = rec("surviving", **common, **{
+            F.F_RECORD_ID: "00Q_M", F.F_EMAIL: "koparkars@amazon.com",
+            F.F_ACCOUNT_NAME: "Amazon", F.F_ACCOUNT_ID: "001_AMZN",
+            F.F_DOMAIN: "amazon.com",
+        })
+        fixes = {c.column: c.value for c in evaluate(group(master, [dup], surv)).corrections}
+        assert fixes[F.F_EMAIL] == "skoparkar@nvidia.com"
+        assert fixes[F.F_ACCOUNT_NAME] == "NVIDIA", "Account must follow the email"
+        assert fixes[F.F_ACCOUNT_ID] == "001_NVDA"
+        assert fixes[F.F_DOMAIN] == "nvidia.com"
+
+    def test_agreeing_employer_fields_are_not_restated(self):
+        """A correction that changes nothing is noise; only disagreements surface."""
+        common = {F.F_FULL_NAME: "Dana Reyes", F.F_COMPANY: "Northwind",
+                  F.F_LINKEDIN: "in/dreyes", F.F_ACCOUNT_NAME: "Northwind"}
+        master = rec("master", **common, **{
+            F.F_RECORD_ID: "00Q_M", F.F_EMAIL: "d.reyes@oldco.com"})
+        dup = rec("duplicate", **common, **{
+            F.F_RECORD_ID: "00Q_D", F.F_EMAIL: "dreyes@northwind.com"})
+        surv = rec("surviving", **common, **{
+            F.F_RECORD_ID: "00Q_M", F.F_EMAIL: "d.reyes@oldco.com"})
+        cols = {c.column for c in evaluate(group(master, [dup], surv)).corrections}
+        assert F.F_EMAIL in cols
+        assert F.F_ACCOUNT_NAME not in cols, "already Northwind on both sides"
+
     def test_blank_targets_are_dropped(self):
         v = Verdict(group=None, findings=[
             Finding("a", "review", "t", "d", corrections=[Correction(F.F_TITLE, "", "no value")]),

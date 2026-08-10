@@ -219,32 +219,51 @@ def check_employment(g: Group) -> list[Finding]:
     kept = N.email(g.surviving.get(F.F_EMAIL))
     fresh = freshest(g.records)
 
-    # --- the survivor's email should belong to the employer it claims -------
+    # --- the survivor's employer fields must agree with each other -----------
+    # Email, Account link and Domain all describe one thing: where this person works
+    # now. Deciding them by different tests produces an incoherent survivor -- an
+    # NVIDIA address filed under the Amazon Account -- so the record whose email
+    # matches Company is treated as *the* current-employer record and its employer
+    # fields are taken as a set.
     if kept and company:
         kept_matches = N.company_matches_domain(company, N.email_domain(kept))
-        better = [
-            N.email(rec.get(F.F_EMAIL))
-            for rec in g.records
-            if N.email(rec.get(F.F_EMAIL))
-            and N.email(rec.get(F.F_EMAIL)) != kept
-            and N.company_matches_domain(company, N.email_domain(rec.get(F.F_EMAIL)))
-        ]
-        if not kept_matches and better:
+        current = next(
+            (
+                rec for rec in g.records
+                if N.email(rec.get(F.F_EMAIL))
+                and N.email(rec.get(F.F_EMAIL)) != kept
+                and N.company_matches_domain(company, N.email_domain(rec.get(F.F_EMAIL)))
+            ),
+            None,
+        )
+        if not kept_matches and current is not None:
+            addr = N.email(current.get(F.F_EMAIL))
             personal = N.is_free_email(kept)
+            fixes = [Correction(
+                F.F_EMAIL, addr, f"domain matches the current employer ({company})",
+            )]
+            # Carry the rest of that record's employer identity, but only where the
+            # survivor actually disagrees -- a correction that changes nothing is noise.
+            for logical in (F.F_ACCOUNT_ID, F.F_ACCOUNT_NAME, F.F_DOMAIN):
+                theirs, survivors = current.get(logical), g.surviving.get(logical)
+                if theirs and theirs != survivors:
+                    fixes.append(Correction(
+                        logical, theirs,
+                        f"belongs with the {company} record that owns the kept email",
+                    ))
+            trailing = [g.schema.label(c.column) for c in fixes[1:]]
             out.append(Finding(
                 code="stale_email_kept",
                 severity=CRITICAL,
                 title="Merge keeps the wrong primary email",
                 detail=(
                     f"The survivor works at {company} but keeps "
-                    f"{'a personal address' if personal else 'a former employer’s address'}."
+                    f"{'a personal address' if personal else 'a former employer’s address'}"
+                    + (f", and {', '.join(trailing)} follow it." if trailing else ".")
                 ),
-                fields=[F.F_EMAIL, F.F_COMPANY, F.F_DOMAIN],
-                evidence=[("Company", company), ("Keeps", kept), ("Discards", better[0])],
-                corrections=[Correction(
-                    F.F_EMAIL, better[0],
-                    f"domain matches the current employer ({company})",
-                )],
+                fields=[F.F_EMAIL, F.F_COMPANY, F.F_DOMAIN, F.F_ACCOUNT_ID, F.F_ACCOUNT_NAME],
+                evidence=[("Company", company), ("Keeps", kept), ("Discards", addr)],
+                corrections=fixes,
             ))
 
     # --- the survivor's title should come from the freshest record ----------
