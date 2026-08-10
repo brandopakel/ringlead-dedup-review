@@ -136,6 +136,43 @@ class TestCorrections:
         assert v.master_change.record.record_id == "00Q_NEW"
         assert v.projected.group.surviving.get(F.F_ACCOUNT_NAME) == "Coalfirefederal"
 
+    def test_account_is_never_repointed_away_from_the_employer(self):
+        """Recency is not licence to set an Account that contradicts Company.
+
+        A record touched later by an automated process once caused "Highmark" to be
+        recommended as the Account for someone whose Company is Sidley Austin.
+        """
+        common = {F.F_FULL_NAME: "Lalakhan Patan", F.F_COMPANY: "Sidley Austin"}
+        master = rec("master", **{**common, F.F_RECORD_ID: "00Q_M",
+                                  F.F_EMAIL: "lpatan@sidley.com",
+                                  F.F_ACCOUNT_NAME: "Sidley Austin", F.F_ACCOUNT_ID: "001_SID",
+                                  F.F_CREATED: "2026-05-28T00:00:00.000Z"})
+        # Newer by every automated stamp, but its Account has nothing to do with
+        # the employer on the group.
+        dup = rec("duplicate", **{**common, F.F_RECORD_ID: "00Q_D",
+                                  F.F_EMAIL: "lalakhanpatan@gmail.com",
+                                  F.F_ACCOUNT_NAME: "Highmark", F.F_ACCOUNT_ID: "001_HM",
+                                  F.F_CREATED: "2026-07-30T00:00:00.000Z"})
+        surv = rec("surviving", **{**common, F.F_RECORD_ID: "00Q_M",
+                                   F.F_EMAIL: "lpatan@sidley.com",
+                                   F.F_ACCOUNT_NAME: "Sidley Austin", F.F_ACCOUNT_ID: "001_SID"})
+        v = evaluate(group(master, [dup], surv))
+        end = (v.projected.group if v.projected else v.group).surviving
+        fixes = {c.column: c.value for c in v.corrections}
+        assert fixes.get(F.F_ACCOUNT_NAME) != "Highmark"
+        assert end.get(F.F_ACCOUNT_NAME) == "Sidley Austin"
+
+    def test_recency_ignores_automated_write_timestamps(self):
+        """Last Modified tracks enrichment traffic, not whether a record is current."""
+        from ringlead_qa.rules import recency
+        current = rec("duplicate", **{F.F_CREATED: "2026-05-28T00:00:00.000Z",
+                                      F.F_ACTIVITY: "2026-06-05"})
+        touched = rec("master", **{F.F_CREATED: "2025-04-21T00:00:00.000Z",
+                                   F.F_MODIFIED: "2026-07-30T00:00:00.000Z",
+                                   F.F_ZI_UPDATED: "2026-07-30T00:00:00.000Z"})
+        assert recency(current) > recency(touched), (
+            "a later automated write must not make a stale record look fresher")
+
     def test_agreeing_employer_fields_are_not_restated(self):
         """A correction that changes nothing is noise; only disagreements surface."""
         common = {F.F_FULL_NAME: "Dana Reyes", F.F_COMPANY: "Northwind",

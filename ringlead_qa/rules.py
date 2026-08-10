@@ -86,18 +86,22 @@ class Finding:
 # --------------------------------------------------------------------------
 # Recency
 # --------------------------------------------------------------------------
-# Most Recent Activity Date is the intuitive freshness signal but it is present on
-# only 34% of records -- in 212 of 460 groups neither record has one, so it cannot
-# carry weight on its own. This composite has ~100% coverage instead.
+# Calibrated against ground truth -- the record whose email domain matches Company --
+# across 251 groups, asking which timestamp identifies that record:
+#
+#     max(activity, created)   71%
+#     created alone            69%
+#     Last Modified            51%   <- a coin flip
+#     ZoomInfo Last Updated    48%   <- worse than chance
+#
+# Last Modified and the ZoomInfo stamps move whenever an automated process writes to
+# a record, so they measure enrichment traffic rather than whether the record still
+# describes the person. Both are excluded. Activity is the sharpest signal but sits
+# on only 34% of records; Created Date carries the rest.
 
 def recency(rec: Record) -> str:
-    """Freshest timestamp available on a record. ISO strings sort correctly."""
-    return max(
-        rec.get(F.F_ZI_UPDATED),
-        rec.get(F.F_ZI_ENRICH_DATE),
-        rec.get(F.F_MODIFIED),
-        rec.get(F.F_CREATED),
-    )
+    """How recently this record was genuinely relevant. ISO strings sort correctly."""
+    return max(rec.get(F.F_ACTIVITY)[:10], rec.get(F.F_CREATED)[:10])
 
 
 def freshest(records: list[Record]) -> Record | None:
@@ -468,7 +472,13 @@ def check_employment(g: Group) -> list[Finding]:
     # --- the survivor's Account link should be the current employer's -------
     if fresh is not None:
         fresh_acct, kept_acct = fresh.get(F.F_ACCOUNT_ID), g.surviving.get(F.F_ACCOUNT_ID)
-        if fresh_acct and kept_acct and fresh_acct != kept_acct:
+        # Recency alone is not licence to repoint the Account. On one group it named
+        # Highmark as the Account for someone whose Company is Sidley Austin, purely
+        # because an automated write had touched that record more recently. The
+        # replacement has to agree with Company, and the incumbent has to not.
+        kept_fits = N.same_company(company, g.surviving.get(F.F_ACCOUNT_NAME))
+        fresh_fits = N.same_company(company, fresh.get(F.F_ACCOUNT_NAME))
+        if fresh_acct and kept_acct and fresh_acct != kept_acct and fresh_fits and not kept_fits:
             out.append(Finding(
                 code="stale_account_link",
                 severity=CONTRIB,
