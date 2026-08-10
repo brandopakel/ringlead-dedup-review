@@ -575,6 +575,11 @@ class Verdict:
 
     @property
     def status(self) -> str:
+        # Ranked before "critical" because the action is categorically different:
+        # every other flagged group gets merged with corrections, this one should
+        # not be merged at all until a human confirms the records are one person.
+        if self.corrections_blocked:
+            return "skip"
         if self.critical:
             return "critical"
         if self.review or self.contributor_score >= REVIEW_THRESHOLD:
@@ -587,11 +592,13 @@ class Verdict:
 
     @property
     def sort_key(self) -> tuple:
-        rank = {"critical": 0, "review": 1, "ok": 2}[self.status]
+        rank = {"skip": 0, "critical": 1, "review": 2, "ok": 3}[self.status]
         return (rank, -len(self.critical), -len(self.review), -self.contributor_score, self.group.group_id)
 
     @property
     def headline(self) -> str:
+        if self.status == "skip":
+            return "Do not merge — may be different people"
         for f in self.findings:
             if f.severity in (CRITICAL, REVIEW):
                 return f.title
@@ -636,6 +643,8 @@ class Verdict:
         Findings are sorted critical-first, and a corroborated recommendation
         outranks a single-signal one.
         """
+        if self.corrections_blocked:
+            return None
         candidates = [f.master_change for f in self.findings if f.master_change]
         if not candidates:
             return None

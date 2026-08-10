@@ -41,6 +41,8 @@ LIGHT: dict[str, str] = {
     "warning": "35 92% 40%",
     "success": "142 71% 33%",
     "info": "221 83% 53%",
+    # "do not merge" -- a distinct action from "fix a value", so a distinct hue
+    "skip": "271 76% 45%",
     # domain colours -- RingLead's own language for a merge outcome
     "survive-bg": "142 60% 94%",
     "lost-bg": "349 90% 96%",
@@ -69,6 +71,7 @@ DARK: dict[str, str] = {
     "warning": "35 92% 60%",
     "success": "142 65% 50%",
     "info": "217 91% 68%",
+    "skip": "271 85% 74%",
     "survive-bg": "142 45% 12%",
     "lost-bg": "349 60% 14%",
     "on-status": "240 10% 3.9%",

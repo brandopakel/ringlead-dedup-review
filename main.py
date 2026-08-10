@@ -25,6 +25,7 @@ from ringlead_qa.loader import load
 from ringlead_qa.remediation import (
     correction_sheet,
     master_change_sheet,
+    skip_sheet,
     survivorship_changelist,
 )
 from ringlead_qa.report import render
@@ -86,7 +87,7 @@ def main() -> int:
 
     verdicts = [evaluate(g) for g in groups]
     counts = Counter(v.status for v in verdicts)
-    queue = counts["critical"] + counts["review"]
+    queue = len(verdicts) - counts["ok"]
 
     out = args.out or REPORT_DIR / f"{src.stem}_qa.html"
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -100,6 +101,10 @@ def main() -> int:
     corrections = correction_sheet(verdicts)
     corrections_path = out.with_name(f"{src.stem}_corrections.csv")
     corrections.to_csv(corrections_path, index=False)
+
+    skips = skip_sheet(verdicts)
+    skips_path = out.with_name(f"{src.stem}_do_not_merge.csv")
+    skips.to_csv(skips_path, index=False)
 
     masters = master_change_sheet(verdicts)
     masters_path = out.with_name(f"{src.stem}_master_changes.csv")
@@ -116,6 +121,7 @@ def main() -> int:
         print(f"  {len(schema.unresolved)} field(s) not found in this export "
               f"— run --schema for detail")
     print()
+    print(f"  {counts['skip']:>4}  DO NOT MERGE — likely different people")
     print(f"  {counts['critical']:>4}  needs a fix")
     print(f"  {counts['review']:>4}  needs review")
     print(f"  {counts['ok']:>4}  clean, skip  ({pct}%)\n")
@@ -124,6 +130,7 @@ def main() -> int:
     print(f"  {len(corrections):>4}  records need a field corrected after merge\n")
     print(f"  report   {out}")
     print(f"  changes  {changelist}")
+    print(f"  skip     {skips_path}")
     print(f"  masters  {masters_path}")
     print(f"  fixes    {corrections_path}")
     if args.csv_out:

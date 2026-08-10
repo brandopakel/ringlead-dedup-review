@@ -50,7 +50,17 @@ Needs Python 3.10 or newer (`python3 --version` to check).
 
 ## Reading the report
 
-Findings sort worst-first. Work **Fix** before **Review**; **Clean** can be skipped.
+Findings sort worst-first, and the four statuses mean four different actions:
+
+| Status | What to do in RingLead |
+| --- | --- |
+| **Skip** | Do **not** merge. Independent identifiers disagree, so the records are probably different people. Confirm, then use Skip. |
+| **Fix** | Merge, but correct the listed fields — the report names the value each should be. |
+| **Review** | Can't be settled from the data. Open it and decide. |
+| **Clean** | Nothing to do. |
+
+Each expanded group shows its **Group ID** in a click-to-select box, so it can be
+pasted straight into RingLead's search.
 
 - `j` / `k` — move between groups, `Enter` — expand, `x` — mark reviewed, `/` — search
 - Progress is saved in your browser per export file, so you can stop and resume
@@ -64,6 +74,7 @@ Salesforce PII and must never be committed.
 | File | For | Contents |
 | --- | --- | --- |
 | `*_qa.html` | you | the review queue, with a **Should be** column per flagged group |
+| `*_do_not_merge.csv` | you | groups that should be **skipped** in RingLead, not merged — the records are probably different people |
 | `*_survivorship_changes.md` | whoever owns the RingLead criteria | settings to change once, ranked by how many groups each clears |
 | `*_master_changes.csv` | whoever owns the RingLead criteria | groups where a **different record should be master** — fix in RingLead *before* merging |
 | `*_corrections.csv` | whoever has Salesforce write access | one row per surviving Lead ID with the fields to correct after the merge, Data Loader-shaped |

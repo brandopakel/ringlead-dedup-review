@@ -22,7 +22,7 @@ from . import fields as F
 from . import tokens
 from .rules import Verdict
 
-STATUS_LABEL = {"critical": "Fix", "review": "Review", "ok": "Clean"}
+STATUS_LABEL = {"skip": "Skip", "critical": "Fix", "review": "Review", "ok": "Clean"}
 
 STYLES = """
 *{box-sizing:border-box}
@@ -53,11 +53,12 @@ h1{font-size:20px;font-weight:600;letter-spacing:-.02em;margin:0}
 .reset:hover{color:hsl(var(--foreground))}
 
 /* ---- cards ---- */
-.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px}
+.cards{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:20px}
 .card{background:hsl(var(--card));border:1px solid hsl(var(--border));
   border-radius:var(--radius);padding:16px 18px}
 .card .n{font-size:26px;font-weight:600;line-height:1.1;letter-spacing:-.02em}
 .card .l{color:hsl(var(--muted-foreground));font-size:12px;margin-top:4px}
+.card.skip .n{color:hsl(var(--skip))}
 .card.crit .n{color:hsl(var(--destructive))}
 .card.rev .n{color:hsl(var(--warning))}
 .card.ok .n{color:hsl(var(--success))}
@@ -125,6 +126,15 @@ h1{font-size:20px;font-weight:600;letter-spacing:-.02em;margin:0}
   background:hsl(var(--destructive)/.1);border-color:hsl(var(--destructive)/.25)}
 .badge.review{color:hsl(var(--warning));
   background:hsl(var(--warning)/.1);border-color:hsl(var(--warning)/.25)}
+.badge.skip{color:hsl(var(--skip));
+  background:hsl(var(--skip)/.12);border-color:hsl(var(--skip)/.3)}
+.grp.skip{border-left:3px solid hsl(var(--skip))}
+.gidbar{display:flex;align-items:center;gap:10px;padding:10px 0 2px;flex-wrap:wrap}
+.gidlbl{font-size:11px;color:hsl(var(--muted-foreground))}
+.gidval{font:inherit;font-family:ui-monospace,Menlo,monospace;font-size:13px;
+  border:1px solid hsl(var(--input));border-radius:calc(var(--radius) - 2px);
+  background:hsl(var(--muted));color:hsl(var(--foreground));padding:3px 9px;width:13ch}
+.gidhint{font-size:11px;color:hsl(var(--muted-foreground));opacity:.75}
 .badge.ok{color:hsl(var(--success));
   background:hsl(var(--success)/.1);border-color:hsl(var(--success)/.25)}
 .gname{font-weight:500}
@@ -288,6 +298,9 @@ document.getElementById('reset').onclick=()=>{
   groups.forEach(g=>g.classList.remove('done')); apply();
 };
 q.oninput=()=>{cursor=-1;apply()};
+for(const g of document.querySelectorAll('.gidval')){
+  g.onclick=e=>{e.stopPropagation(); g.select();};
+}
 
 for(const t of document.querySelectorAll('.tgl')){
   t.onclick=e=>{
@@ -503,7 +516,15 @@ def _group_row(v: Verdict, idx: int) -> str:
     <span class="ghl">{_esc(v.headline)}</span>
     <span class="gid mono">{_esc(g.group_id)}</span>
   </summary>
-  <div class="body">{_findings(v)}{_fixes(v)}{_table(v, f"t{idx}")}</div>
+  <div class="body">
+    <div class="gidbar">
+      <span class="gidlbl">Group ID</span>
+      <input class="gidval mono" value="{_esc(g.group_id)}" readonly
+             aria-label="Group ID, click to select">
+      <span class="gidhint">click to select, then copy</span>
+    </div>
+    {_findings(v)}{_fixes(v)}{_table(v, f"t{idx}")}
+  </div>
 </details>"""
 
 
@@ -546,6 +567,7 @@ def render(verdicts: list[Verdict], *, source: str, total_rows: int) -> str:
 </div>
 
 <div class="cards">
+  <div class="card skip"><div class="n">{counts['skip']}</div><div class="l">Do not merge</div></div>
   <div class="card crit"><div class="n">{counts['critical']}</div><div class="l">Needs a fix</div></div>
   <div class="card rev"><div class="n">{counts['review']}</div><div class="l">Needs review</div></div>
   <div class="card ok"><div class="n">{counts['ok']}</div><div class="l">Clean — skip</div></div>
@@ -555,6 +577,7 @@ def render(verdicts: list[Verdict], *, source: str, total_rows: int) -> str:
 
 <div class="bar">
   <button class="btn" data-kind="status" data-val="all" aria-pressed="true">All <span class="cnt">{len(verdicts)}</span></button>
+  <button class="btn" data-kind="status" data-val="skip">Skip <span class="cnt">{counts['skip']}</span></button>
   <button class="btn" data-kind="status" data-val="critical">Fix <span class="cnt">{counts['critical']}</span></button>
   <button class="btn" data-kind="status" data-val="review">Review <span class="cnt">{counts['review']}</span></button>
   <button class="btn" data-kind="status" data-val="ok">Clean <span class="cnt">{counts['ok']}</span></button>

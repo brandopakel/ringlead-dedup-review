@@ -185,6 +185,34 @@ def correction_sheet(verdicts: list[Verdict]) -> pd.DataFrame:
     return df[lead + rest]
 
 
+def skip_sheet(verdicts: list[Verdict]) -> pd.DataFrame:
+    """Groups that should not be merged at all.
+
+    A separate action from everything else in the queue: these are worked in
+    RingLead with Skip rather than Merge, so they get their own list to run down
+    rather than being buried among groups needing a field corrected.
+    """
+    rows = []
+    for v in verdicts:
+        if v.status != "skip":
+            continue
+        conflicts = [f for f in v.findings if f.code == "identity_conflict"]
+        rows.append({
+            "Group ID": v.group.group_id,
+            "Action": "SKIP — do not merge",
+            "Name": v.group.surviving.get(F.F_FULL_NAME),
+            "Company": v.group.surviving.get(F.F_COMPANY),
+            "Signals that disagree": len(conflicts),
+            "Evidence": " | ".join(
+                f"{label}: {value}" for f in conflicts for label, value in f.evidence
+            ),
+            "Record IDs": ", ".join(r.record_id for r in v.group.records),
+        })
+    cols = ["Group ID", "Action", "Name", "Company", "Signals that disagree",
+            "Evidence", "Record IDs"]
+    return pd.DataFrame(rows, columns=cols)
+
+
 def master_change_sheet(verdicts: list[Verdict]) -> pd.DataFrame:
     """Groups where a different record should be the master.
 
