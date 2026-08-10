@@ -36,6 +36,15 @@ _GENERIC_LOCALPARTS = {
     "no-reply", "webmaster", "postmaster", "careers", "jobs", "hr", "legal",
 }
 
+# Company values that carry no employer signal. A group matched on name plus one of
+# these is matched on name alone, which is why they are 6.5x more likely to be
+# unverifiable than a group with a real Company.
+PLACEHOLDER_COMPANIES = {
+    "", "[not provided]", "not provided", "unknown", "n/a", "na", "none", "null",
+    "-", "--", "test", "tbd", "no company", "self", "self employed", "student",
+    "personal", "individual",
+}
+
 # Titles that carry no employment signal, so they must never win a freshness contest.
 UNINFORMATIVE_TITLES = {
     "", "other", "n/a", "na", "none", "unknown", "-", "--", "test",
@@ -178,6 +187,11 @@ def domain_only(value) -> str:
     v = re.sub(r"^https?://", "", v).split("/")[0].split("?")[0]
     v = re.sub(r"^www\.", "", v).strip(". ")
     return v if "." in v else ""
+
+
+def is_placeholder_company(value) -> bool:
+    """True when Company says nothing about where the person works."""
+    return lower(value) in PLACEHOLDER_COMPANIES
 
 
 def informative_title(value) -> bool:

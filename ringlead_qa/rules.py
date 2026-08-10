@@ -186,6 +186,20 @@ def check_identity(g: Group) -> list[Finding]:
             weight=2,
         ))
 
+    # Weight 0 on purpose: 11 of the 13 groups this fires on are already flagged for
+    # a stronger reason, and the other 2 carry positive identity confirmation. It
+    # earns its place by naming a match-criteria fix, not by growing the queue.
+    if N.is_placeholder_company(g.surviving.get(F.F_COMPANY)):
+        out.append(Finding(
+            code="placeholder_company",
+            severity=CONTRIB,
+            title="Company is a placeholder",
+            detail="With no real Company, this group is matched on name alone.",
+            weight=0,
+            fields=[F.F_COMPANY],
+            evidence=[("Company", g.surviving.get(F.F_COMPANY) or "(empty)")],
+        ))
+
     generic = [r.get(F.F_EMAIL) for r in g.records if N.is_generic_email(r.get(F.F_EMAIL))]
     if generic:
         out.append(Finding(

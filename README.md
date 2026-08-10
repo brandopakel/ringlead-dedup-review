@@ -2,7 +2,7 @@
 
 Triages a RingLead deduplication resolution export so only the groups that actually
 need a human get opened. On the first real export it cut a 460-group manual review
-down to 222, and named nine systemic rule changes covering 218 groups — worth more
+down to 222, and named ten systemic rule changes covering 218 groups — worth more
 than the review itself.
 
 ## Running it

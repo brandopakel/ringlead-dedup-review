@@ -64,8 +64,16 @@ SURVIVORSHIP_RULES = {
         "Master selection — activity recency",
         "Weight Most Recent Activity Date more heavily when choosing the master.",
     ),
+    "placeholder_company": (
+        "Match criteria — placeholder Company values",
+        "Exclude records whose Company is a placeholder ([not provided], unknown, "
+        "n/a, blank) from name+company matching, or require a second identifier for "
+        "them. With no real Company the rule collapses to name-only: in the sample "
+        "export 85% of these groups could not be verified as the same person, "
+        "against 13% of groups with a real Company — 6.5x the rate.",
+    ),
     "identity_unverified": (
-        "Match criteria",
+        "Match criteria — require a second identifier",
         "These groups match on name and company alone. Require a second identifier — "
         "LinkedIn Profile, ZoomInfo Contact ID, or Mobile — to group records.",
     ),
