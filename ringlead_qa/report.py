@@ -19,6 +19,7 @@ from collections import Counter
 from datetime import datetime
 
 from . import fields as F
+from . import tokens
 from .rules import Verdict
 
 STATUS_LABEL = {"critical": "Fix", "review": "Review", "ok": "Clean"}
@@ -46,30 +47,7 @@ SYSTEMIC_ADVICE = {
         "record — first-touch attribution is history, not current state.",
 }
 
-CSS = """
-/* Design tokens follow shadcn/ui's zinc theme -- same palette, radius scale and
-   component idiom, written as plain CSS so the file stays self-contained. */
-:root{
-  --background:0 0% 100%; --foreground:240 10% 3.9%;
-  --card:0 0% 100%; --muted:240 4.8% 95.9%; --muted-foreground:240 3.8% 46.1%;
-  --border:240 5.9% 90%; --input:240 5.9% 90%; --ring:240 5.9% 10%;
-  --primary:240 5.9% 10%; --primary-foreground:0 0% 98%;
-  --accent:240 4.8% 95.9%; --accent-foreground:240 5.9% 10%;
-  --destructive:0 72% 51%; --warning:35 92% 40%; --success:142 71% 33%;
-  --info:221 83% 53%;
-  --survive-bg:142 60% 94%; --lost-bg:349 90% 96%;
-  --radius:0.5rem;
-}
-@media (prefers-color-scheme:dark){:root:not([data-theme=light]){
-  --background:240 10% 3.9%; --foreground:0 0% 98%;
-  --card:240 10% 5.5%; --muted:240 3.7% 15.9%; --muted-foreground:240 5% 64.9%;
-  --border:240 3.7% 17%; --input:240 3.7% 17%; --ring:240 4.9% 83.9%;
-  --primary:0 0% 98%; --primary-foreground:240 5.9% 10%;
-  --accent:240 3.7% 15.9%; --accent-foreground:0 0% 98%;
-  --destructive:0 72% 62%; --warning:35 92% 60%; --success:142 65% 50%;
-  --info:217 91% 68%;
-  --survive-bg:142 45% 12%; --lost-bg:349 60% 14%;
-}}
+STYLES = """
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%}
 body{margin:0;background:hsl(var(--background));color:hsl(var(--foreground));
@@ -163,7 +141,7 @@ h1{font-size:20px;font-weight:600;letter-spacing:-.02em;margin:0}
   display:grid;place-items:center;font-size:10px;color:transparent;
   background:hsl(var(--background))}
 .chk:hover{border-color:hsl(var(--ring))}
-.grp.done .chk{background:hsl(var(--success));border-color:hsl(var(--success));color:#fff}
+.grp.done .chk{background:hsl(var(--success));border-color:hsl(var(--success));color:hsl(var(--on-status))}
 .badge{font-size:11px;font-weight:500;padding:2px 0;border-radius:999px;
   text-align:center;border:1px solid transparent}
 .badge.critical{color:hsl(var(--destructive));
@@ -255,6 +233,11 @@ tr.flagged th.fld{box-shadow:inset 3px 0 0 hsl(var(--info));
   .clean{columns:2}
 }
 """
+
+#: The stylesheet the report ships: token contract first, then rules that may only
+#: reference those tokens. tests/test_tokens.py fails the build if a rule below
+#: names a token this contract does not define, or writes a raw colour literal.
+CSS = tokens.css_variables() + STYLES
 
 JS = """
 const groups=[...document.querySelectorAll('.grp')];
