@@ -20,7 +20,7 @@ from datetime import datetime
 import pandas as pd
 
 from . import fields as F
-from .rules import Verdict
+from .rules import Verdict, surviving_record_id
 
 # code -> (setting to change in RingLead, what to change it to)
 #
@@ -165,15 +165,15 @@ def correction_sheet(verdicts: list[Verdict]) -> pd.DataFrame:
         corrections = v.corrections
         if not corrections:
             continue
-        if v.master_change is not None:
-            # The surviving Lead ID is about to change, so this row's Id would target
-            # a record that should not survive. Held back deliberately -- see
-            # master_change_sheet() -- and re-derived once the master is corrected.
-            continue
+        # Groups needing a master change are no longer held back. Their corrections
+        # are computed against the projected survivor, so the Id here is the record
+        # that will actually survive -- provided the master change is made first,
+        # which the flag column states outright.
         row = {
-            "Id": v.group.surviving.record_id,
+            "Id": surviving_record_id(v),
             "Group ID": v.group.group_id,
             "Status": v.status,
+            "Requires master change first": "YES" if v.master_change else "",
             "Name": v.group.surviving.get(F.F_FULL_NAME),
             "Company": v.group.surviving.get(F.F_COMPANY),
         }
@@ -184,10 +184,11 @@ def correction_sheet(verdicts: list[Verdict]) -> pd.DataFrame:
         rows.append(row)
 
     if not rows:
-        return pd.DataFrame(columns=["Id", "Group ID", "Status", "Name", "Company"])
+        return pd.DataFrame(columns=["Id", "Group ID", "Status",
+                                     "Requires master change first", "Name", "Company"])
 
     df = pd.DataFrame(rows)
-    lead = ["Id", "Group ID", "Status", "Name", "Company"]
+    lead = ["Id", "Group ID", "Status", "Requires master change first", "Name", "Company"]
     rest = sorted(c for c in df.columns if c not in lead)
     # Keep each field beside its [was] column so a reviewer can eyeball the change.
     return df[lead + rest]
@@ -242,10 +243,10 @@ def master_change_sheet(verdicts: list[Verdict]) -> pd.DataFrame:
             "Should be master": mc.record.record_id,
             "Why": mc.why,
             "Confidence": "corroborated" if mc.corroborated else "single signal",
-            "Field fixes held back": len(v.corrections),
+            "Field fixes to apply after": len(v.corrections),
         })
     cols = ["Group ID", "Status", "Name", "Company", "Current master",
-            "Should be master", "Why", "Confidence", "Field fixes held back"]
+            "Should be master", "Why", "Confidence", "Field fixes to apply after"]
     return pd.DataFrame(rows, columns=cols)
 
 

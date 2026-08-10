@@ -173,6 +173,9 @@ h1{font-size:20px;font-weight:600;letter-spacing:-.02em;margin:0}
 .fixes .mrow th,.fixes .mrow td{padding-bottom:8px}
 .fixes .mrow th{font-weight:500;color:hsl(var(--foreground))}
 .fixes .mrow .fix{color:hsl(var(--info));font-weight:600}
+.fixes .subhead th{padding:12px 0 4px;font-size:11px;font-weight:600;
+  color:hsl(var(--muted-foreground));text-transform:uppercase;letter-spacing:.05em}
+.fixes .auto{color:hsl(var(--muted-foreground))}
 .fixes .why{color:hsl(var(--muted-foreground));font-size:11px}
 .fnote{color:hsl(var(--muted-foreground));font-size:11px;margin:9px 0 0;max-width:64ch}
 
@@ -366,10 +369,16 @@ def _table(v: Verdict, tid: str) -> str:
     # A pending master change makes every value here provisional -- the surviving
     # record itself is about to change -- so the column is dropped, matching the
     # correction sheet, which holds those groups back for the same reason.
-    fixes = (
-        {} if v.master_change
-        else {g.schema.resolve(c.column) or c.column: c for c in v.corrections}
-    )
+    fixes = {g.schema.resolve(c.column) or c.column: c.value for c in v.corrections}
+    if v.projected:
+        # Values the master change produces on its own belong here too -- the column
+        # answers "what should this field end up as", not "what must you type".
+        for col in g.populated_columns():
+            if g.schema.tier(col) == "noise" or col in fixes:
+                continue
+            after = v.projected.group.surviving.get(col)
+            if after != g.surviving.get(col):
+                fixes[col] = after
 
     order = [g.surviving, g.master, *g.duplicates]
     heads = ['<th class="fld">Field</th>', '<th class="col-surv">After merge</th>']
@@ -398,10 +407,10 @@ def _table(v: Verdict, tid: str) -> str:
             f'<td class="col-surv">{_esc(survivor) or "—"}</td>',
         ]
         if fixes:
-            fix = fixes.get(col)
+            target = fixes.get(col)
             cells.append(
-                f'<td class="col-fix fix" title="{_esc(fix.why)}">{_esc(fix.value)}</td>'
-                if fix and fix.value != survivor
+                f'<td class="col-fix fix">{_esc(target)}</td>'
+                if target and target != survivor
                 else '<td class="col-fix blank">—</td>'
             )
         cells += [
@@ -448,8 +457,27 @@ def _findings(v: Verdict) -> str:
     return "".join(out)
 
 
+def _auto_changes(v: Verdict) -> list[tuple[str, str, str]]:
+    """Fields the master change fixes by itself: (label, today, after).
+
+    RingLead recomputes the survivor once the master changes, so these need no
+    manual action -- but showing them is what makes the recommendation legible.
+    """
+    if not v.projected:
+        return []
+    manual = {v.group.schema.resolve(c.column) or c.column for c in v.corrections}
+    out = []
+    for col in v.group.populated_columns():
+        if v.group.schema.tier(col) == "noise" or col in manual:
+            continue
+        before, after = v.group.surviving.get(col), v.projected.group.surviving.get(col)
+        if before != after:
+            out.append((v.group.schema.label(col), before, after))
+    return out
+
+
 def _fixes(v: Verdict) -> str:
-    """The corrected values, stated plainly before the field-by-field table."""
+    """The complete end state: one pass, no re-export loop."""
     mc = v.master_change
     if v.corrections_blocked:
         return (
@@ -459,39 +487,51 @@ def _fixes(v: Verdict) -> str:
     if not v.corrections and not mc:
         return ""
 
-    master_row = ""
+    sections = []
     if mc:
-        master_row = (
+        sections.append(
             '<tr class="mrow"><th>Master record</th>'
             f'<td class="was">{_esc(v.group.master.record_id)}</td>'
             '<td class="arrow">&rarr;</td>'
             f'<td class="fix">{_esc(mc.record.record_id)}</td>'
             f'<td class="why">{_esc(mc.why)}'
-            + ("" if mc.corroborated else " — single signal, confirm before changing")
+            + ("" if mc.corroborated else " — single signal, confirm first")
             + "</td></tr>"
         )
 
-    field_rows = [] if mc else list(v.corrections)
-    rows = master_row + "".join(
-        f"<tr><th>{_esc(v.group.schema.label(c.column))}</th>"
-        f'<td class="was">{_esc(v.group.surviving.get(c.column)) or "—"}</td>'
-        f'<td class="arrow">&rarr;</td>'
-        f'<td class="fix">{_esc(c.value)}</td>'
-        f'<td class="why">{_esc(c.why)}</td></tr>'
-        for c in field_rows
-    )
-    # A master change is applied in RingLead before merging; the field values below it
-    # are computed against the *current* preview, so they have to be re-read afterwards.
-    note = (
-        '<p class="fnote">Changing the master changes which record survives, so no '
-        'field values are recommended yet. Make this change in RingLead, re-export, '
-        'and re-run — the corrections are computed against whichever record survives.'
-        '</p>' if mc else ""
-    )
-    heading = "Change the master, then re-check" if mc else "Set these on the surviving record"
+    auto = _auto_changes(v)
+    if auto:
+        sections.append(
+            '<tr class="subhead"><th colspan="5">RingLead recomputes these once the '
+            "master changes — no action needed</th></tr>"
+        )
+        sections += [
+            f"<tr><th>{_esc(label)}</th>"
+            f'<td class="was">{_esc(before) or "—"}</td>'
+            '<td class="arrow">&rarr;</td>'
+            f'<td class="auto">{_esc(after) or "—"}</td><td class="why"></td></tr>'
+            for label, before, after in auto[:12]
+        ]
+
+    if v.corrections:
+        if mc:
+            sections.append(
+                '<tr class="subhead"><th colspan="5">Then set these by hand</th></tr>'
+            )
+        target = v.projected.group if v.projected else v.group
+        sections += [
+            f"<tr><th>{_esc(v.group.schema.label(c.column))}</th>"
+            f'<td class="was">{_esc(target.surviving.get(c.column)) or "—"}</td>'
+            '<td class="arrow">&rarr;</td>'
+            f'<td class="fix">{_esc(c.value)}</td>'
+            f'<td class="why">{_esc(c.why)}</td></tr>'
+            for c in v.corrections
+        ]
+
+    heading = "Make these changes in RingLead" if mc else "Set these on the surviving record"
     return (
         f'<div class="fixes{" has-master" if mc else ""}"><h3>{heading}</h3>'
-        f"<table>{rows}</table>{note}</div>"
+        f'<table>{"".join(sections)}</table></div>'
     )
 
 

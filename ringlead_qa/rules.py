@@ -665,6 +665,36 @@ def check_data_loss(g: Group) -> list[Finding]:
 
 
 # --------------------------------------------------------------------------
+# Projection: what the merge produces under a different master
+# --------------------------------------------------------------------------
+
+def project(g: Group, new_master: Record) -> Group:
+    """Rebuild the group as if `new_master` had won.
+
+    Mirrors RingLead's observed survivorship: the master's value wins, and where
+    the master is blank the value is filled from a duplicate. Recommending a master
+    change and then computing field fixes against the *old* preview would send the
+    reviewer round an export/re-import loop, so the fixes are derived from this
+    projection instead -- the state RingLead will compute once the master is changed.
+    """
+    others = [r for r in g.records if r is not new_master]
+    data = {}
+    for col in g.schema.columns:
+        value = new_master.data.get(col, "")
+        if not N.clean(value):
+            for other in others:
+                if N.clean(other.data.get(col, "")):
+                    value = other.data.get(col)
+                    break
+        data[col] = value
+    return Group(
+        group_id=g.group_id, schema=g.schema,
+        surviving=Record("surviving", data, g.schema),
+        master=new_master, duplicates=others,
+    )
+
+
+# --------------------------------------------------------------------------
 
 ALL_CHECKS = (check_identity, check_employment, check_master_choice, check_data_loss)
 
@@ -673,6 +703,10 @@ ALL_CHECKS = (check_identity, check_employment, check_master_choice, check_data_
 class Verdict:
     group: Group
     findings: list[Finding]
+    #: The same group re-evaluated under the recommended master, when one is
+    #: recommended. Field fixes are read from here so a reviewer sees one coherent
+    #: end state rather than two rounds of changes.
+    projected: "Verdict | None" = None
 
     @property
     def critical(self) -> list[Finding]:
@@ -746,8 +780,11 @@ class Verdict:
         """
         if self.corrections_blocked:
             return []
+        # After a master change RingLead recomputes the survivor itself, so the only
+        # values worth listing are the ones still wrong afterwards.
+        source = self.projected.findings if self.projected else self.findings
         seen: dict[str, Correction] = {}
-        for f in self.findings:
+        for f in source:
             for c in f.corrections:
                 if c.value and c.column not in seen:
                     seen[c.column] = c
@@ -777,10 +814,34 @@ class Verdict:
         return out
 
 
-def evaluate(group: Group) -> Verdict:
+def _run_checks(group: Group) -> list[Finding]:
     findings: list[Finding] = []
     for check in ALL_CHECKS:
         findings.extend(check(group))
     order = {CRITICAL: 0, REVIEW: 1, CONTRIB: 2}
     findings.sort(key=lambda f: (order[f.severity], -f.weight))
-    return Verdict(group=group, findings=findings)
+    return findings
+
+
+def evaluate(group: Group) -> Verdict:
+    verdict = Verdict(group=group, findings=_run_checks(group))
+    change = verdict.master_change
+    if change is not None:
+        # Evaluated once, without projecting again -- the recommendation is already
+        # applied, so a second round would have nothing left to change.
+        projected = project(group, change.record)
+        verdict.projected = Verdict(group=projected, findings=_run_checks(projected))
+    return verdict
+
+
+def surviving_record_id(v: Verdict) -> str:
+    """The record that will actually survive, honouring a recommended master change.
+
+    Reads the recommendation directly rather than relying on the projection, so the
+    answer holds however the verdict was assembled.
+    """
+    if v.projected is not None:
+        return v.projected.group.master.record_id
+    if v.master_change is not None:
+        return v.master_change.record.record_id
+    return v.group.surviving.record_id

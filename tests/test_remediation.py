@@ -1,9 +1,10 @@
 """Tests for what gets recommended, and where it is allowed to land.
 
-The safety-critical rule here: a group whose master should change must never appear
-in the Salesforce correction sheet. Its surviving Lead ID is about to change, so an
-`Id` written from the current preview would target a record that is not going to
-survive — updating a soon-to-be-deleted row and leaving the real survivor untouched.
+The safety-critical rule here concerns which record a correction targets. When a
+group's master should change, the record that survives changes with it, so an `Id`
+taken from the current preview would update a row that is about to be deleted and
+leave the real survivor untouched. Corrections for those groups are computed against
+the projected survivor and addressed to it.
 """
 
 import pytest
@@ -279,21 +280,39 @@ class TestSheetRouting:
         assert list(sheet["Email"]) == ["sangjin_lee@intuit.com"]
         assert list(sheet["[was] Email"]) == ["slee@apple.com"]
 
-    def test_master_change_holds_the_group_back(self, stale_email_group):
-        """The whole point: a changing survivor must not get post-merge field writes."""
+    def test_corrections_address_the_record_that_will_survive(self, stale_email_group):
+        """A master change moves the target: the Id must follow it, not the old preview."""
         v = evaluate(stale_email_group)
         v.findings.append(Finding(
             "master_stale", "review", "t", "d",
             master_change=MasterChange(record=stale_email_group.duplicates[0],
                                        why="more active", corroborated=True),
         ))
-        assert v.corrections, "still has field fixes"
-        assert correction_sheet([v]).empty, "but they must not be applied post-merge"
+        sheet = correction_sheet([v])
+        assert not sheet.empty
+        assert list(sheet["Id"]) == ["00Q_DUP"], "the new master is what survives"
+        assert list(sheet["Requires master change first"]) == ["YES"]
 
         masters = master_change_sheet([v])
         assert list(masters["Current master"]) == ["00Q_MASTER"]
         assert list(masters["Should be master"]) == ["00Q_DUP"]
-        assert list(masters["Field fixes held back"]) == [len(v.corrections)]
+
+    def test_a_master_change_can_remove_the_need_for_field_edits(self):
+        """If promoting the right record already fixes the value, do not also ask for it."""
+        common = {F.F_FULL_NAME: "Inigo Monreal", F.F_COMPANY: "Expedia Group",
+                  F.F_LINKEDIN: "in/imonreal"}
+        master = rec("master", **{**common, F.F_RECORD_ID: "00Q_OLD",
+                                  F.F_EMAIL: "inigo.monreal@bath.edu",
+                                  F.F_OWNER_ACTIVE: "false", F.F_OWNER_NAME: "Departed Rep"})
+        dup = rec("duplicate", **{**common, F.F_RECORD_ID: "00Q_NEW",
+                                  F.F_EMAIL: "imonreal@expediagroup.com",
+                                  F.F_OWNER_ACTIVE: "true", F.F_OWNER_NAME: "Active Rep"})
+        surv = rec("surviving", **{**common, F.F_RECORD_ID: "00Q_OLD",
+                                   F.F_EMAIL: "inigo.monreal@bath.edu"})
+        v = evaluate(group(master, [dup], surv))
+        assert v.master_change.record.record_id == "00Q_NEW"
+        assert F.F_EMAIL not in {c.column for c in v.corrections}, (
+            "promoting the Expedia record already fixes the email")
 
     def test_clean_groups_produce_no_rows(self):
         common = {F.F_COMPANY: "Acme", F.F_FULL_NAME: "Jo Doe",
