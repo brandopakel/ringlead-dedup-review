@@ -2,24 +2,62 @@
 
 Triages a RingLead deduplication resolution export so only the groups that actually
 need a human get opened. On the first real export it cut a 460-group manual review
-down to 223, and named two systemic rule problems worth more than the review itself.
+down to 222, and named nine systemic rule changes covering 218 groups — worth more
+than the review itself.
+
+## Running it
+
+Every run, once set up:
 
 ```bash
+cd ~/ringlead-dedup-review
+source .venv/bin/activate       # prompt gains a (.venv) prefix
+python main.py --open           # newest export in data/, opens the report
+```
+
+Drop the RingLead CSV export in `data/` first. The newest CSV there is used unless
+you pass a path.
+
+```bash
+python main.py                        # newest export in data/
+python main.py data/Accounts.csv      # a specific export
+python main.py --csv-out triage.csv   # also write a flat one-row-per-group sheet
+python main.py --schema               # show how fields resolved, then exit
+python -m pytest                      # 57 tests
+```
+
+Without activating the venv, call its interpreter directly — same thing:
+
+```bash
+.venv/bin/python main.py --open
+```
+
+## First-time setup
+
+`.venv/` is deliberately not in git, so a fresh clone needs it built once:
+
+```bash
+git clone https://github.com/brandopakel/ringlead-dedup-review.git
+cd ringlead-dedup-review
+python3 -m venv .venv
 source .venv/bin/activate
+pip install -r requirements.txt
+mkdir -p data                   # put the RingLead export here
 python main.py --open
 ```
 
-Drop the RingLead CSV export in `data/` and run. The newest CSV there is used unless
-you pass a path. Output is a single self-contained HTML file in `reports/`.
+Needs Python 3.10 or newer (`python3 --version` to check).
 
-```
-python main.py                        # newest export in data/
-python main.py path/to/export.csv     # a specific one
-python main.py --csv-out triage.csv   # also write a flat one-row-per-group sheet
-```
+## Reading the report
+
+Findings sort worst-first. Work **Fix** before **Review**; **Clean** can be skipped.
+
+- `j` / `k` — move between groups, `Enter` — expand, `x` — mark reviewed, `/` — search
+- Progress is saved in your browser per export file, so you can stop and resume
+- **Hide reviewed** shrinks the queue as you work
 
 `data/`, `reports/`, and every `*.csv` are gitignored — the exports are real
-Salesforce PII.
+Salesforce PII and must never be committed.
 
 ## What every run produces
 
