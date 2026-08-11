@@ -680,17 +680,57 @@ def check_data_loss(g: Group) -> list[Finding]:
                 )],
             ))
 
-    # --- the original source is history and must not be overwritten ---------
+    # --- attribution: the oldest *informative* source, not merely the oldest ----
+    # Chronology alone made this rule destructive: it pushed "Paid Digital" back to
+    # "Sales Generated" whenever the rep-created row happened to be older, which was
+    # half of everything it recommended. A rep-generated value records that someone
+    # keyed the row in, not where the lead came from, so a real source outranks it
+    # regardless of age. Age decides only among sources of equal standing.
+    def source_rank(rec):
+        return F.LEAD_SOURCE_RANK.get(
+            N.lower(rec.get(F.F_LEAD_SOURCE)), F.DEFAULT_LEAD_SOURCE_RANK
+        )
+
+    sourced = [r for r in g.records if r.get(F.F_LEAD_SOURCE)]
+    if sourced:
+        best = max(source_rank(r) for r in sourced)
+        # Oldest among the best-ranked records: that is the true first touch.
+        attribution = min((r for r in sourced if source_rank(r) == best), key=recency)
+        # Lead Source and its Detail describe one event and move together.
+        for logical in (F.F_LEAD_SOURCE, F.F_LEAD_SOURCE_DETAIL):
+            theirs, kept = attribution.get(logical), g.surviving.get(logical)
+            if theirs and kept and N.lower(theirs) != N.lower(kept):
+                out.append(Finding(
+                    code="original_source_overwritten",
+                    severity=CONTRIB,
+                    title="First-touch attribution is overwritten",
+                    detail="The survivor reports a different source than the first real touch.",
+                    weight=0,
+                    fields=[g.schema.col(logical) or logical],
+                    evidence=[
+                        ("Field", g.schema.label(logical)),
+                        ("Survivor", kept),
+                        ("First touch", theirs),
+                    ],
+                    corrections=[Correction(
+                        logical, theirs,
+                        "earliest record carrying a real acquisition source",
+                    )],
+                ))
+
     oldest = min(g.records, key=recency) if len(g.records) > 1 else None
     if oldest is not None:
         # Lead Source Detail is excluded when the group is event-sourced: recency
         # already decided it just above, and both rules claiming the column would
         # emit contradictory targets.
+        # Lead Source and Lead Source Detail are decided above, by standing rather
+        # than by age alone; leaving them here too would emit contradictory targets.
+        claimed = {g.schema.col(F.F_LEAD_SOURCE), g.schema.col(F.F_LEAD_SOURCE_DETAIL)}
         skip_detail = detail_col if event_records else None
         overwritten = [
             (col, oldest.get(col), g.surviving.get(col))
             for col in g.schema.historical_fields
-            if col != skip_detail
+            if col != skip_detail and col not in claimed
             and oldest.get(col) and g.surviving.get(col)
             # Case-insensitive: "ZoomInfo" surviving as "Zoominfo" is the same value
             # typed differently, not first-touch attribution being overwritten.

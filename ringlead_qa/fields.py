@@ -248,6 +248,20 @@ SYSTEM_NOISE_LABELS = frozenset({
 # Dozens of workflow-bookkeeping timestamps, matched by label prefix.
 SYSTEM_NOISE_LABEL_PREFIXES = ("Date Entered ", "Date Exited ", "Individual Address (")
 
+#: How much acquisition information a Lead Source actually carries.
+#:
+#: "Sales Generated", "Outbound" and "List Build" record that a rep created the row.
+#: They are the *absence* of marketing attribution, not an alternative to it, so a
+#: real source always outranks them however old the rep-created record is. Anything
+#: not listed here defaults to 1, a genuine source. Give real sources distinct ranks
+#: here if some should outrank others -- the rule reads this map, nothing else.
+LEAD_SOURCE_RANK = {
+    "sales generated": 0,
+    "outbound": 0,
+    "list build": 0,
+}
+DEFAULT_LEAD_SOURCE_RANK = 1
+
 #: A Lead Source naming an event ("Industry Event", "MinIO Event"). First-touch logic
 #: inverts for these: the latest event someone attended is the useful fact, whereas
 #: the channel they originally arrived through is history.

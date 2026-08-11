@@ -242,6 +242,50 @@ class TestIdentityCalibration:
         assert v.status != "skip"
 
 
+class TestAttribution:
+    """First touch means the earliest real source, not merely the earliest row."""
+
+    def _group(self, master_src, dup_src, master_created, dup_created):
+        common = {F.F_FULL_NAME: "Neal Vali", F.F_COMPANY: "ThinkLabs AI",
+                  F.F_EMAIL: "neal@thinklabs.ai"}
+        m = rec("master", **{**common, F.F_RECORD_ID: "00Q_M",
+                             F.F_LEAD_SOURCE: master_src, F.F_CREATED: master_created})
+        d = rec("duplicate", **{**common, F.F_RECORD_ID: "00Q_D",
+                                F.F_LEAD_SOURCE: dup_src, F.F_CREATED: dup_created})
+        s = rec("surviving", **{**common, F.F_RECORD_ID: "00Q_M",
+                                F.F_LEAD_SOURCE: master_src})
+        return group(m, [d], s)
+
+    def test_a_rep_created_row_never_outranks_a_real_source(self):
+        """The old rule pushed Paid Digital back to Sales Generated on age alone."""
+        v = evaluate(self._group(
+            master_src="Paid Digital", dup_src="Sales Generated",
+            master_created="2026-01-01T00:00:00.000Z",
+            dup_created="2024-01-01T00:00:00.000Z",   # older, but rep-created
+        ))
+        fixes = {c.column: c.value for c in v.corrections}
+        assert fixes.get(F.F_LEAD_SOURCE) != "Sales Generated"
+
+    def test_a_real_source_replaces_a_rep_created_one(self):
+        v = evaluate(self._group(
+            master_src="Sales Generated", dup_src="Paid Digital",
+            master_created="2024-01-01T00:00:00.000Z",
+            dup_created="2026-01-01T00:00:00.000Z",
+        ))
+        fixes = {c.column: c.value for c in v.corrections}
+        assert fixes.get(F.F_LEAD_SOURCE) == "Paid Digital"
+
+    def test_age_still_decides_between_two_real_sources(self):
+        """Among sources of equal standing the earliest is the genuine first touch."""
+        v = evaluate(self._group(
+            master_src="Paid Digital", dup_src="Organic",
+            master_created="2026-01-01T00:00:00.000Z",
+            dup_created="2024-01-01T00:00:00.000Z",
+        ))
+        fixes = {c.column: c.value for c in v.corrections}
+        assert fixes.get(F.F_LEAD_SOURCE) == "Organic"
+
+
 class TestIdentitySignalStrength:
     """A disagreement is only a verdict when the signal that disagrees is an identity key."""
 
