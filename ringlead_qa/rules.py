@@ -870,6 +870,36 @@ def check_data_loss(g: Group) -> list[Finding]:
                 ],
             ))
 
+    # --- inbound demand outranks outbound prospecting ------------------------
+    kept_channel = F.CHANNEL_RANK.get(N.lower(g.surviving.get(F.F_CHANNEL)))
+    channels = [
+        (r, F.CHANNEL_RANK[N.lower(r.get(F.F_CHANNEL))])
+        for r in g.records if N.lower(r.get(F.F_CHANNEL)) in F.CHANNEL_RANK
+    ]
+    if kept_channel is not None and channels:
+        best_rec, best = max(channels, key=lambda rc: rc[1])
+        if best > kept_channel:
+            out.append(Finding(
+                # Weight 0, like the other derivable-value rules.
+                code="channel_downgrade",
+                severity=CONTRIB,
+                weight=0,
+                title="Merge buries a stronger channel",
+                detail=(
+                    "A record shows this person arrived through a stronger channel. "
+                    "That stays true of the person however many later touches follow."
+                ),
+                fields=[F.F_CHANNEL],
+                evidence=[
+                    ("Keeps", g.surviving.get(F.F_CHANNEL)),
+                    ("Discards", f"{best_rec.get(F.F_CHANNEL)} (on the {best_rec.label.lower()})"),
+                ],
+                corrections=[Correction(
+                    F.F_CHANNEL, best_rec.get(F.F_CHANNEL),
+                    "strongest channel any record in the group shows",
+                )],
+            ))
+
     # --- narrative fields are unrecoverable once merged ----------------------
     for col in (F.F_NOTES, F.F_DESCRIPTION, F.F_UNQUALIFIED):
         lost = g.lost_values(col)

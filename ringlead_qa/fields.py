@@ -76,6 +76,7 @@ F_DESCRIPTION = "description"
 F_UNQUALIFIED = "unqualified_reason"
 F_LEAD_SOURCE = "lead_source"
 F_LEAD_SOURCE_DETAIL = "lead_source_detail"
+F_CHANNEL = "channel"
 
 # Fields shared across every entity type. Values are candidate column labels, tried
 # in order -- the first that exists in the file wins.
@@ -105,6 +106,7 @@ _COMMON = {
     F_LAST_ACTIVITY: ["Last Activity"],
     F_CREATED: ["Created Date"],
     F_MODIFIED: ["Last Modified Date"],
+    F_CHANNEL: ["Channel"],
     F_LEAD_SOURCE: ["Lead Source"],
     F_LEAD_SOURCE_DETAIL: ["Lead Source Detail"],
     F_NOTES: ["Notes"],
@@ -278,6 +280,17 @@ LEAD_TIER_RANK = {
 #: merge is a symptom of which record survived, and the email or Account is the lever.
 CORPORATE_EMAIL_TIERS = {"tier 3", "tier 4"}
 PERSONAL_EMAIL_TIER = "tier 5"
+
+#: Channel, strongest first: Partner, then Inbound, then Outbound.
+#:
+#: Partner leads the ladder because a partner-sourced record arrives with a deal
+#: registration behind it -- demand plus a route to close. Inbound is demand the
+#: person expressed themselves. Outbound only records that we prospected them.
+#:
+#: Whichever a group's records show, the strongest is a fact about the person: if
+#: they ever came to us, that stays true however many outbound touches follow, so a
+#: merge must not bury it.
+CHANNEL_RANK = {"partner": 2, "inbound": 1, "outbound": 0}
 
 #: How much acquisition information a Lead Source actually carries.
 #:

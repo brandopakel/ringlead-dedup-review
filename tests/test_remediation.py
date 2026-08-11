@@ -420,6 +420,39 @@ class TestNamesOutrankEnrichment:
         assert evaluate(group(m, [d], s)).status != "skip"
 
 
+class TestChannelStrength:
+    """Partner beats Inbound beats Outbound; the strongest is true of the person."""
+
+    def _pair(self, kept, other):
+        common = {F.F_FULL_NAME: "Loic Poligny", F.F_COMPANY: "GHGSat"}
+        m = rec("master", **{**common, F.F_RECORD_ID: "00Q_M", F.F_CHANNEL: kept})
+        d = rec("duplicate", **{**common, F.F_RECORD_ID: "00Q_D", F.F_CHANNEL: other})
+        s = rec("surviving", **{**common, F.F_RECORD_ID: "00Q_M", F.F_CHANNEL: kept})
+        return group(m, [d], s)
+
+    def test_inbound_replaces_outbound(self):
+        fixes = {c.column: c.value for c in evaluate(self._pair("Outbound", "Inbound")).corrections}
+        assert fixes.get(F.F_CHANNEL) == "Inbound"
+
+    def test_partner_replaces_inbound(self):
+        fixes = {c.column: c.value for c in evaluate(self._pair("Inbound", "Partner")).corrections}
+        assert fixes.get(F.F_CHANNEL) == "Partner"
+
+    def test_partner_replaces_outbound(self):
+        fixes = {c.column: c.value for c in evaluate(self._pair("Outbound", "Partner")).corrections}
+        assert fixes.get(F.F_CHANNEL) == "Partner"
+
+    def test_a_stronger_channel_is_never_downgraded(self):
+        for kept, other in [("Partner", "Inbound"), ("Partner", "Outbound"),
+                            ("Inbound", "Outbound")]:
+            v = evaluate(self._pair(kept, other))
+            assert F.F_CHANNEL not in {c.column for c in v.corrections}, f"{kept} vs {other}"
+
+    def test_an_unknown_channel_never_wins(self):
+        v = evaluate(self._pair("Inbound", "Referral Programme"))
+        assert F.F_CHANNEL not in {c.column for c in v.corrections}
+
+
 class TestFullestAddressWins:
     def _pair(self, kept, other, names=("Elisa Del Monte", "Elisa Del Monte")):
         common = {F.F_COMPANY: "Seacom"}

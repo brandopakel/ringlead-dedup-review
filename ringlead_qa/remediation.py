@@ -62,6 +62,13 @@ SURVIVORSHIP_RULES = {
         "Field survivorship — Mobile",
         "Prefer the most recently updated record.",
     ),
+    "channel_downgrade": (
+        "Field survivorship — Channel",
+        "Prefer Partner over Inbound over Outbound. Partner arrives with a deal "
+        "registration behind it; Inbound records that the person came to us, which "
+        "stays true however many outbound touches follow; Outbound only records that "
+        "we prospected them.",
+    ),
     "lead_tier_downgrade": (
         "No survivorship change — Lead Tier is derived",
         "Do NOT set a survivorship rule for Lead Tier. The Marketing Field Dictionary "
