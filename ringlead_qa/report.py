@@ -133,10 +133,12 @@ h1{font-size:20px;font-weight:600;letter-spacing:-.025em;margin:0}
 .grp.skip{border-left:3px solid hsl(var(--skip))}
 .gidbar{display:flex;align-items:center;gap:10px;padding:10px 0 2px;flex-wrap:wrap}
 .gidlbl{font-size:11px;color:hsl(var(--muted-foreground))}
+.gidval.wide{width:26ch}
 .gidval{font:inherit;font-family:var(--mono);font-size:13px;
   border:1px solid hsl(var(--input));border-radius:calc(var(--radius) - 2px);
   background:hsl(var(--muted));color:hsl(var(--foreground));padding:3px 9px;width:13ch}
-.gidhint{font-size:11px;color:hsl(var(--muted-foreground));opacity:.75}
+.gidhint{font-size:11px;color:hsl(var(--muted-foreground));opacity:.75;
+  flex:1;min-width:16ch}
 .badge.ok{color:hsl(var(--success));
   background:hsl(var(--success)/.1);border-color:hsl(var(--success)/.25)}
 .gname{font-weight:500}
@@ -591,7 +593,14 @@ def _group_row(v: Verdict, idx: int) -> str:
       <span class="gidlbl">Group ID</span>
       <input class="gidval mono" value="{_esc(g.group_id)}" readonly
              aria-label="Group ID, click to select">
-      <span class="gidhint">click to select, then copy</span>
+      <span class="gidlbl">Email</span>
+      <input class="gidval mono wide" value="{_esc(g.surviving.get(F.F_EMAIL))}" readonly
+             aria-label="Email, click to select">
+      <span class="gidlbl">Record</span>
+      <input class="gidval mono" value="{_esc(g.master.record_id)}" readonly
+             aria-label="Master record ID, click to select">
+      <span class="gidhint">group IDs change when a recurring resolution re-runs —
+        search by email or record ID if a group cannot be found</span>
     </div>
     {_findings(v)}{_fixes(v)}{_table(v, f"t{idx}")}
   </div>
