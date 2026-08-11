@@ -173,6 +173,25 @@ class TestCorrections:
         assert recency(current) > recency(touched), (
             "a later automated write must not make a stale record look fresher")
 
+    def test_a_title_is_not_borrowed_from_another_employer(self):
+        """"Tupperware consultant" is not the title of someone at payroll solutions."""
+        common = {F.F_FULL_NAME: "Mary Johnson", F.F_COMPANY: "payroll solutions iii"}
+        master = rec("master", **{**common, F.F_RECORD_ID: "00Q_M",
+                                  F.F_EMAIL: "marylovesluke@yahoo.com",
+                                  F.F_TITLE: "Payroll Administrator",
+                                  F.F_CREATED: "2024-01-01T00:00:00.000Z"})
+        dup = rec("duplicate", **{F.F_FULL_NAME: "Mary Johnson", F.F_COMPANY: "Tupperware",
+                                  F.F_RECORD_ID: "00Q_D", F.F_EMAIL: "moxieme63@yahoo.com",
+                                  F.F_TITLE: "Tupperware consultant",
+                                  F.F_ACCOUNT_NAME: "Tupperware",
+                                  F.F_CREATED: "2026-07-28T00:00:00.000Z"})
+        surv = rec("surviving", **{**common, F.F_RECORD_ID: "00Q_M",
+                                   F.F_EMAIL: "marylovesluke@yahoo.com",
+                                   F.F_TITLE: "Payroll Administrator",
+                                   F.F_ACCOUNT_NAME: "Tupperware"})
+        fixes = {c.column: c.value for c in evaluate(group(master, [dup], surv)).corrections}
+        assert fixes.get(F.F_TITLE) != "Tupperware consultant"
+
     def test_agreeing_employer_fields_are_not_restated(self):
         """A correction that changes nothing is noise; only disagreements surface."""
         common = {F.F_FULL_NAME: "Dana Reyes", F.F_COMPANY: "Northwind",

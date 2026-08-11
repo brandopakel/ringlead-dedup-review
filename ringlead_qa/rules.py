@@ -440,9 +440,16 @@ def check_employment(g: Group) -> list[Finding]:
             ))
 
     # --- the survivor's title should come from the freshest record ----------
+    # A job title belongs to a job. Taking one from a record that works somewhere
+    # else describes that other role -- on one group it recommended "Tupperware
+    # consultant" for a survivor whose Company reads "payroll solutions iii".
+    def same_employer(rec) -> bool:
+        theirs = rec.get(F.F_COMPANY) or rec.get(F.F_ACCOUNT_NAME)
+        return not (company and theirs) or N.same_company(company, theirs)
+
     titled = [
         (rec, rec.get(F.F_TITLE)) for rec in g.records
-        if N.informative_title(rec.get(F.F_TITLE))
+        if N.informative_title(rec.get(F.F_TITLE)) and same_employer(rec)
     ]
     if len(titled) >= 2:
         newest, fresh_title = max(titled, key=lambda rt: recency(rt[0]))
