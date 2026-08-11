@@ -248,6 +248,11 @@ SYSTEM_NOISE_LABELS = frozenset({
 # Dozens of workflow-bookkeeping timestamps, matched by label prefix.
 SYSTEM_NOISE_LABEL_PREFIXES = ("Date Entered ", "Date Exited ", "Individual Address (")
 
+#: Lead Tier priority, highest first. Tier 1 is the strongest, so a merge must never
+#: hand back a weaker tier than some record in the group already earned. "Tier X" and
+#: anything else unlisted is treated as unknown and never wins.
+LEAD_TIER_RANK = {"tier 1": 5, "tier 2": 4, "tier 3": 3, "tier 4": 2, "tier 5": 1}
+
 #: How much acquisition information a Lead Source actually carries.
 #:
 #: "Sales Generated", "Outbound" and "List Build" record that a rep created the row.

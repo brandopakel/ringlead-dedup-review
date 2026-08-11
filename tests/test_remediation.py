@@ -275,6 +275,41 @@ class TestAttribution:
         fixes = {c.column: c.value for c in v.corrections}
         assert fixes.get(F.F_LEAD_SOURCE) == "Paid Digital"
 
+    def test_the_most_recent_event_survives(self):
+        """On event-sourced records the Detail names which event was attended."""
+        common = {F.F_FULL_NAME: "Fernando Aznar", F.F_COMPANY: "Microsoft",
+                  F.F_LEAD_SOURCE: "Industry Event"}
+        m = rec("master", **{**common, F.F_RECORD_ID: "00Q_M",
+                             F.F_LEAD_SOURCE_DETAIL: "Supercomputing-StLouis-2025",
+                             F.F_CREATED: "2025-11-04T00:00:00.000Z"})
+        d = rec("duplicate", **{**common, F.F_RECORD_ID: "00Q_D",
+                                F.F_LEAD_SOURCE_DETAIL: "NVIDIA-GTC-San-Jose-2026",
+                                F.F_CREATED: "2026-03-04T00:00:00.000Z"})
+        s = rec("surviving", **{**common, F.F_RECORD_ID: "00Q_M",
+                                F.F_LEAD_SOURCE_DETAIL: "NVIDIA-GTC-San-Jose-2026"})
+        fixes = {c.column: c.value for c in evaluate(group(m, [d], s)).corrections}
+        assert fixes.get(F.F_LEAD_SOURCE_DETAIL) != "Supercomputing-StLouis-2025", (
+            "first-touch must not hand back the older event")
+
+    def test_a_merge_never_downgrades_the_lead_tier(self):
+        common = {F.F_FULL_NAME: "Fernando Aznar", F.F_COMPANY: "Microsoft"}
+        m = rec("master", **{**common, F.F_RECORD_ID: "00Q_M", F.F_LEAD_TIER: "Tier 3"})
+        d = rec("duplicate", **{**common, F.F_RECORD_ID: "00Q_D", F.F_LEAD_TIER: "Tier 1"})
+        s = rec("surviving", **{**common, F.F_RECORD_ID: "00Q_M", F.F_LEAD_TIER: "Tier 3"})
+        v = evaluate(group(m, [d], s))
+        end = (v.projected.group if v.projected else v.group).surviving
+        fixes = {c.column: c.value for c in v.corrections}
+        assert fixes.get(F.F_LEAD_TIER) == "Tier 1" or end.get(F.F_LEAD_TIER) == "Tier 1"
+
+    def test_an_unknown_tier_never_wins(self):
+        """"Tier X" is unranked and must not displace a real tier."""
+        common = {F.F_FULL_NAME: "Fernando Aznar", F.F_COMPANY: "Microsoft"}
+        m = rec("master", **{**common, F.F_RECORD_ID: "00Q_M", F.F_LEAD_TIER: "Tier 2"})
+        d = rec("duplicate", **{**common, F.F_RECORD_ID: "00Q_D", F.F_LEAD_TIER: "Tier X"})
+        s = rec("surviving", **{**common, F.F_RECORD_ID: "00Q_M", F.F_LEAD_TIER: "Tier 2"})
+        fixes = {c.column: c.value for c in evaluate(group(m, [d], s)).corrections}
+        assert F.F_LEAD_TIER not in fixes
+
     def test_age_still_decides_between_two_real_sources(self):
         """Among sources of equal standing the earliest is the genuine first touch."""
         v = evaluate(self._group(

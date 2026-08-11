@@ -696,8 +696,14 @@ def check_data_loss(g: Group) -> list[Finding]:
         best = max(source_rank(r) for r in sourced)
         # Oldest among the best-ranked records: that is the true first touch.
         attribution = min((r for r in sourced if source_rank(r) == best), key=recency)
-        # Lead Source and its Detail describe one event and move together.
-        for logical in (F.F_LEAD_SOURCE, F.F_LEAD_SOURCE_DETAIL):
+        # Lead Source and its Detail describe one event and move together -- except
+        # on event-sourced records, where the Detail names which event was attended
+        # and the most recent one wins. Claiming it here too would hand back the
+        # older event and undo that rule.
+        columns = [F.F_LEAD_SOURCE]
+        if not event_records:
+            columns.append(F.F_LEAD_SOURCE_DETAIL)
+        for logical in columns:
             theirs, kept = attribution.get(logical), g.surviving.get(logical)
             if theirs and kept and N.lower(theirs) != N.lower(kept):
                 out.append(Finding(
@@ -750,6 +756,35 @@ def check_data_loss(g: Group) -> list[Finding]:
                     Correction(c, old, "first-touch attribution belongs to the original record")
                     for c, old, _ in overwritten
                 ],
+            ))
+
+    # --- tier is earned; a merge must not hand back a weaker one -------------
+    kept_tier = F.LEAD_TIER_RANK.get(N.lower(g.surviving.get(F.F_LEAD_TIER)))
+    tiered = [
+        (r, F.LEAD_TIER_RANK[N.lower(r.get(F.F_LEAD_TIER))])
+        for r in g.records if N.lower(r.get(F.F_LEAD_TIER)) in F.LEAD_TIER_RANK
+    ]
+    if kept_tier is not None and tiered:
+        best_rec, best = max(tiered, key=lambda rt: rt[1])
+        if best > kept_tier:
+            out.append(Finding(
+                # Weight 0, like the other derivable-value rules: the strongest tier
+                # in the group is not a judgement call, so this ships as a "Should
+                # be" value and a survivorship change rather than 93 reviews.
+                code="lead_tier_downgrade",
+                severity=CONTRIB,
+                weight=0,
+                title="Merge downgrades the lead tier",
+                detail="A record in this group carries a stronger tier than the survivor keeps.",
+                fields=[F.F_LEAD_TIER],
+                evidence=[
+                    ("Keeps", g.surviving.get(F.F_LEAD_TIER)),
+                    ("Discards", f"{best_rec.get(F.F_LEAD_TIER)} (on the {best_rec.label.lower()})"),
+                ],
+                corrections=[Correction(
+                    F.F_LEAD_TIER, best_rec.get(F.F_LEAD_TIER),
+                    "strongest tier any record in the group earned",
+                )],
             ))
 
     # --- narrative fields are unrecoverable once merged ----------------------

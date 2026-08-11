@@ -56,6 +56,12 @@ SURVIVORSHIP_RULES = {
         "Field survivorship — Mobile",
         "Prefer the most recently updated record.",
     ),
+    "lead_tier_downgrade": (
+        "Field survivorship — Lead Tier",
+        "Prefer the strongest tier any record in the group holds (Tier 1 being "
+        "strongest). Tier is earned through qualification, so a merge should never "
+        "hand back a weaker one than a record already reached.",
+    ),
     "lifecycle_regression": (
         "Field survivorship — Lifecycle Stage",
         "Prefer the furthest funnel stage reached by any record in the group, so a "
