@@ -248,10 +248,27 @@ SYSTEM_NOISE_LABELS = frozenset({
 # Dozens of workflow-bookkeeping timestamps, matched by label prefix.
 SYSTEM_NOISE_LABEL_PREFIXES = ("Date Entered ", "Date Exited ", "Individual Address (")
 
-#: Lead Tier priority, highest first. Tier 1 is the strongest, so a merge must never
-#: hand back a weaker tier than some record in the group already earned. "Tier X" and
-#: anything else unlisted is treated as unknown and never wins.
-LEAD_TIER_RANK = {"tier 1": 5, "tier 2": 4, "tier 3": 3, "tier 4": 2, "tier 5": 1}
+#: Lead Tier priority, per the internal definition:
+#:
+#:   Tier 1  Sales Target Account = Yes, or Account Priority Tier = P0
+#:   Tier 2  Account Segment = Enterprise
+#:   Tier 3  corporate email in a target country
+#:   Tier 4  corporate email in a non-embargoed country
+#:   Tier 5  personal email in a non-embargoed country
+#:   Tier X  all others
+#:
+#: Tier X is the explicit bottom of the ladder rather than an unknown, so a survivor
+#: sitting on it should still be lifted when a record in the group earned a real tier.
+#: Anything unlisted stays unranked and never wins.
+LEAD_TIER_RANK = {
+    "tier 1": 6, "tier 2": 5, "tier 3": 4, "tier 4": 3, "tier 5": 2, "tier x": 1,
+}
+
+#: Tiers 3 and 4 are defined by holding a *corporate* address; Tier 5 by a personal
+#: one. That makes the tier derivable from the email, so correcting the email can
+#: leave the tier describing an address the record no longer has.
+CORPORATE_EMAIL_TIERS = {"tier 3", "tier 4"}
+PERSONAL_EMAIL_TIER = "tier 5"
 
 #: How much acquisition information a Lead Source actually carries.
 #:
