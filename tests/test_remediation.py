@@ -420,6 +420,58 @@ class TestNamesOutrankEnrichment:
         assert evaluate(group(m, [d], s)).status != "skip"
 
 
+class TestPartialMerges:
+    """A group holding two people is not always a write-off."""
+
+    def _three(self):
+        odd = rec("master", **{F.F_RECORD_ID: "00Q_ODD", F.F_FULL_NAME: "Sneha Gopalakrishnan",
+                               F.F_EMAIL: "sneha.g@precisely.com", F.F_COMPANY: "Precisely"})
+        a = rec("duplicate", **{F.F_RECORD_ID: "00Q_A", F.F_FULL_NAME: "Harsimran Singh",
+                                F.F_EMAIL: "harsimran-singh@microfocus.com",
+                                F.F_COMPANY: "Micro Focus",
+                                F.F_CREATED: "2024-01-01T00:00:00.000Z"})
+        b = rec("duplicate", **{F.F_RECORD_ID: "00Q_B", F.F_FULL_NAME: "Harsimran Singh",
+                                F.F_EMAIL: "harsimran-singh@microfocus.com",
+                                F.F_COMPANY: "Micro Focus",
+                                F.F_CREATED: "2026-01-01T00:00:00.000Z"})
+        surv = rec("surviving", **{F.F_RECORD_ID: "00Q_ODD",
+                                   F.F_FULL_NAME: "Sneha Gopalakrishnan",
+                                   F.F_EMAIL: "sneha.g@precisely.com"})
+        return group(odd, [a, b], surv)
+
+    def test_the_odd_record_is_excluded_and_the_rest_merge(self):
+        v = evaluate(self._three())
+        assert v.partial is not None
+        assert [r.record_id for r in v.partial.exclude] == ["00Q_ODD"]
+        assert {r.record_id for r in v.partial.keep} == {"00Q_A", "00Q_B"}
+        assert "Merge 2 of 3" in v.headline
+
+    def test_the_master_moves_into_the_surviving_cluster(self):
+        """The excluded record cannot stay master of a merge it is not part of."""
+        v = evaluate(self._three())
+        assert v.partial.master.record_id in {"00Q_A", "00Q_B"}
+
+    def test_values_are_recommended_again_once_the_group_is_salvaged(self):
+        """Blocking corrections is right for a doomed group, wrong for a rescued one."""
+        v = evaluate(self._three())
+        assert v.corrections_blocked == ""
+
+    def test_all_different_people_stays_a_skip(self):
+        """Nothing to salvage when every record is its own person."""
+        a = rec("master", **{F.F_RECORD_ID: "00Q_A", F.F_FULL_NAME: "Bev Tucker"})
+        b = rec("duplicate", **{F.F_RECORD_ID: "00Q_B", F.F_FULL_NAME: "Diwakar Arumugam"})
+        s = rec("surviving", **{F.F_RECORD_ID: "00Q_A", F.F_FULL_NAME: "Bev Tucker"})
+        v = evaluate(group(a, [b], s))
+        assert v.partial is None
+        assert v.status == "skip"
+
+    def test_one_person_throughout_is_never_split(self):
+        a = rec("master", **{F.F_RECORD_ID: "00Q_A", F.F_FULL_NAME: "Michael Dempsey"})
+        b = rec("duplicate", **{F.F_RECORD_ID: "00Q_B", F.F_FULL_NAME: "Mike Dempsey"})
+        s = rec("surviving", **{F.F_RECORD_ID: "00Q_A", F.F_FULL_NAME: "Michael Dempsey"})
+        assert evaluate(group(a, [b], s)).partial is None
+
+
 class TestIdentityCorroboration:
     def test_identical_email_outranks_a_vendor_id_clash(self):
         """An address identifies one mailbox; it cannot be two people."""

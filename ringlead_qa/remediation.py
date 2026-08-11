@@ -225,12 +225,20 @@ def skip_sheet(verdicts: list[Verdict]) -> pd.DataFrame:
     """
     rows = []
     for v in verdicts:
-        if v.status != "skip":
+        # Partial merges belong here too: the action is worked record-by-record in
+        # RingLead, not by merging the group as proposed.
+        if v.status != "skip" and v.partial is None:
             continue
         conflicts = [f for f in v.findings if f.code == "identity_conflict"]
+        part = v.partial
         rows.append({
             "Group ID": v.group.group_id,
-            "Action": "SKIP — do not merge",
+            "Action": (
+                f"PARTIAL — uncheck {len(part.exclude)}, merge {len(part.keep)}"
+                if part else "SKIP — do not merge"
+            ),
+            "Uncheck these": ", ".join(r.record_id for r in part.exclude) if part else "",
+            "Merge these": ", ".join(r.record_id for r in part.keep) if part else "",
             "Name": v.group.surviving.get(F.F_FULL_NAME),
             "Company": v.group.surviving.get(F.F_COMPANY),
             "Signals that disagree": len(conflicts),
@@ -239,8 +247,8 @@ def skip_sheet(verdicts: list[Verdict]) -> pd.DataFrame:
             ),
             "Record IDs": ", ".join(r.record_id for r in v.group.records),
         })
-    cols = ["Group ID", "Action", "Name", "Company", "Signals that disagree",
-            "Evidence", "Record IDs"]
+    cols = ["Group ID", "Action", "Uncheck these", "Merge these", "Name", "Company",
+            "Signals that disagree", "Evidence", "Record IDs"]
     return pd.DataFrame(rows, columns=cols)
 
 

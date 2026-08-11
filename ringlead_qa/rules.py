@@ -69,6 +69,25 @@ class MasterChange:
 
 
 @dataclass
+class PartialMerge:
+    """Merge some of a group's records and leave the rest out of it.
+
+    RingLead checks each record in a group individually, so a group holding two
+    people is not necessarily a write-off: unchecking the odd one out leaves a
+    legitimate merge behind. Recommending "do not merge" for the whole group would
+    throw that away.
+    """
+
+    keep: list[Record]      # records that belong together
+    exclude: list[Record]   # records to uncheck in RingLead
+    master: Record          # which of `keep` should survive
+
+    @property
+    def summary(self) -> str:
+        return f"Merge {len(self.keep)} of {len(self.keep) + len(self.exclude)} records"
+
+
+@dataclass
 class Finding:
     code: str
     severity: str
@@ -908,6 +927,54 @@ def check_data_loss(g: Group) -> list[Finding]:
 # Projection: what the merge produces under a different master
 # --------------------------------------------------------------------------
 
+def name_clusters(g: Group) -> list[list[Record]]:
+    """Partition a group's records into people, by name relatedness.
+
+    Union-find, so relatedness chains: if A matches B and B matches C, all three are
+    one person even when A and C look unalike on their own.
+    """
+    records = g.records
+    parent = list(range(len(records)))
+
+    def find(i: int) -> int:
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+
+    for i, a in enumerate(records):
+        for j, b in enumerate(records[i + 1:], i + 1):
+            if N.names_are_related(a.get(F.F_FULL_NAME), b.get(F.F_FULL_NAME)):
+                parent[find(i)] = find(j)
+
+    buckets: dict[int, list[Record]] = {}
+    for i, rec in enumerate(records):
+        buckets.setdefault(find(i), []).append(rec)
+    return list(buckets.values())
+
+
+def salvage(g: Group) -> PartialMerge | None:
+    """The merge still worth making when a group holds more than one person.
+
+    None when every record is its own person -- there is nothing to merge -- or when
+    the group is one person after all.
+    """
+    groups_of = name_clusters(g)
+    if len(groups_of) < 2:
+        return None
+    # Largest cluster wins; a tie goes to the one holding the current master, so the
+    # recommendation stays as close to RingLead's own choice as the data allows.
+    best = max(groups_of, key=lambda c: (len(c), g.master in c))
+    if len(best) < 2:
+        return None
+    master = g.master if g.master in best else max(best, key=recency)
+    return PartialMerge(
+        keep=best,
+        exclude=[r for c in groups_of if c is not best for r in c],
+        master=master,
+    )
+
+
 def project(g: Group, new_master: Record) -> Group:
     """Rebuild the group as if `new_master` had won.
 
@@ -947,6 +1014,8 @@ class Verdict:
     #: recommended. Field fixes are read from here so a reviewer sees one coherent
     #: end state rather than two rounds of changes.
     projected: "Verdict | None" = None
+    #: Set when the group holds more than one person but part of it still merges.
+    partial: PartialMerge | None = None
 
     @property
     def critical(self) -> list[Finding]:
@@ -988,6 +1057,8 @@ class Verdict:
 
     @property
     def headline(self) -> str:
+        if self.partial is not None:
+            return f"{self.partial.summary} — uncheck the rest"
         if self.status == "skip":
             return "Do not merge — may be different people"
         for f in self.findings:
@@ -1004,6 +1075,10 @@ class Verdict:
         record's email and employer onto the survivor would fuse two different
         people. The right output there is "look at this", not "set these values".
         """
+        # A salvageable group is not blocked: the records left checked are one
+        # person, so values for them can be recommended as usual.
+        if self.partial is not None:
+            return ""
         if any(f.code in ("identity_conflict", "name_conflict") for f in self.findings):
             return (
                 "These records may not be the same person, so no values are "
@@ -1065,6 +1140,21 @@ def _run_checks(group: Group) -> list[Finding]:
 
 def evaluate(group: Group) -> Verdict:
     verdict = Verdict(group=group, findings=_run_checks(group))
+
+    # When a group holds two people but part of it is a real merge, evaluate that
+    # part on its own -- its recommendations describe what will actually be merged.
+    part = salvage(group)
+    if part is not None:
+        verdict.partial = part
+        sub = project(
+            Group(group_id=group.group_id, schema=group.schema,
+                  surviving=group.surviving, master=part.master,
+                  duplicates=[r for r in part.keep if r is not part.master]),
+            part.master,
+        )
+        verdict.projected = Verdict(group=sub, findings=_run_checks(sub))
+        return verdict
+
     change = verdict.master_change
     if change is not None:
         # Evaluated once, without projecting again -- the recommendation is already

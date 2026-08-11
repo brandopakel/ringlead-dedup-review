@@ -478,6 +478,34 @@ def _auto_changes(v: Verdict) -> list[tuple[str, str, str]]:
     return out
 
 
+def _partial(v: Verdict) -> str:
+    """Which records to uncheck, and which are a real merge."""
+    p = v.partial
+    if p is None:
+        return ""
+    rows = "".join(
+        f'<tr><th>Uncheck</th><td class="was">{_esc(r.record_id)}</td>'
+        f'<td class="arrow">&mdash;</td>'
+        f'<td class="why">{_esc(r.get(F.F_FULL_NAME) or "(no name)")} '
+        f'&middot; {_esc(r.get(F.F_EMAIL) or "no email")}</td></tr>'
+        for r in p.exclude
+    ) + "".join(
+        f'<tr><th>Merge</th><td class="fix">{_esc(r.record_id)}</td>'
+        f'<td class="arrow">{"&#9733;" if r is p.master else ""}</td>'
+        f'<td class="why">{_esc(r.get(F.F_FULL_NAME) or "(no name)")} '
+        f'&middot; {_esc(r.get(F.F_EMAIL) or "no email")}'
+        f'{" — keep as master" if r is p.master else ""}</td></tr>'
+        for r in p.keep
+    )
+    return (
+        '<div class="fixes has-master"><h3>Merge part of this group</h3>'
+        f"<table>{rows}</table>"
+        '<p class="fnote">These records do not all name the same person. Uncheck the '
+        "ones listed above in RingLead, then merge what remains — the values below "
+        "describe that merge, not the group as RingLead proposed it.</p></div>"
+    )
+
+
 def _fixes(v: Verdict) -> str:
     """The complete end state: one pass, no re-export loop."""
     mc = v.master_change
