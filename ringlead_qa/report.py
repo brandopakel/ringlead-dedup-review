@@ -199,6 +199,12 @@ th.fld{font-weight:400;color:hsl(var(--muted-foreground));white-space:normal;
 .col-master{border-left:2px solid hsl(var(--success));border-right:2px solid hsl(var(--success))}
 .col-newmaster{border-left:2px solid hsl(var(--info));border-right:2px solid hsl(var(--info));
   color:hsl(var(--info))}
+/* An unchecked record is context, not a participant: no survives/lost colouring. */
+.col-excluded{color:hsl(var(--muted-foreground));opacity:.55;
+  background:repeating-linear-gradient(135deg,transparent,transparent 5px,
+    hsl(var(--muted)) 5px,hsl(var(--muted)) 10px)}
+thead th.col-excluded{opacity:1;color:hsl(var(--skip));background:hsl(var(--skip)/.09);
+  text-decoration:line-through;text-decoration-thickness:1px}
 .col-surv{background:hsl(var(--muted));font-weight:500}
 .col-fix{background:hsl(var(--success)/.07)}
 td.fix{color:hsl(var(--success));font-weight:500}
@@ -340,8 +346,15 @@ def _esc(v) -> str:
     return html.escape("" if v is None else str(v), quote=True)
 
 
-def _cell(value: str, *, survivor: str, is_master: bool) -> str:
-    """Class a cell the way RingLead colours it."""
+def _cell(value: str, *, survivor: str, is_master: bool, excluded: bool = False) -> str:
+    """Class a cell the way RingLead colours it.
+
+    An excluded record gets no won/lost colouring at all: those colours mean "this
+    value survives" and "this value is destroyed", and neither is true of a record
+    being unchecked. Colouring it would claim it is part of a merge it is not in.
+    """
+    if excluded:
+        return f'<td class="col-excluded">{_esc(value) or "—"}</td>'
     master_cls = "col-master " if is_master else ""
     if not value:
         return f'<td class="{master_cls}blank">—</td>'
@@ -384,15 +397,30 @@ def _table(v: Verdict, tid: str) -> str:
             if after != g.surviving.get(col):
                 fixes[col] = after
 
+    # On a partial merge the roles RingLead assigned no longer describe what will
+    # happen: some records are being unchecked, so calling one "Master" and another
+    # "Duplicate" tells the reviewer the opposite of the recommendation.
+    part = v.partial
+    excluded_ids = {r.record_id for r in part.exclude} if part else set()
+
     order = [g.surviving, g.master, *g.duplicates]
-    heads = ['<th class="fld">Field</th>', '<th class="col-surv">After merge</th>']
+    heads = [
+        '<th class="fld">Field</th>',
+        f'<th class="col-surv">{"As proposed" if part else "After merge"}</th>',
+    ]
     if fixes:
         heads.append('<th class="col-fix">Should be</th>')
     mc = v.master_change
     for rec in order[1:]:
         cls = "col-master" if rec.role == "master" else ""
         label = _esc(rec.label)
-        if mc and rec.record_id == mc.record.record_id:
+        if rec.record_id in excluded_ids:
+            cls, label = "col-excluded", "Uncheck"
+        elif part:
+            is_new_master = rec.record_id == part.master.record_id
+            cls = "col-newmaster" if is_new_master else ""
+            label = "Keep as master" if is_new_master else "Merging"
+        elif mc and rec.record_id == mc.record.record_id:
             cls = (cls + " col-newmaster").strip()
             label = "Should be master"
         elif mc and rec.role == "master":
@@ -418,7 +446,9 @@ def _table(v: Verdict, tid: str) -> str:
                 else '<td class="col-fix blank">—</td>'
             )
         cells += [
-            _cell(rec.get(col), survivor=survivor, is_master=rec.role == "master")
+            _cell(rec.get(col), survivor=survivor,
+                  is_master=rec.role == "master" and not part,
+                  excluded=rec.record_id in excluded_ids)
             for rec in order[1:]
         ]
         rows.append(

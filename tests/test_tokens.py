@@ -86,6 +86,47 @@ class TestBrandTypography:
             assert "var(--" in decl, f"hard-coded family: {decl.strip()}"
 
 
+class TestPartialMergeTable:
+    """An unchecked record must not be dressed as a merge participant."""
+
+    def _partial_report(self):
+        from ringlead_qa.loader import Group, Record
+        from ringlead_qa.rules import evaluate
+        from ringlead_qa import fields as F, report as R
+        cols = [F.GROUP_ID, F.RECORD_ACTION, F.ENTITY_TYPE] + [
+            F.LEAD.prefix + lab for labs in F.LEAD.fields.values() for lab in labs
+        ]
+        schema = F.Schema.build("Lead", cols)
+
+        def rec(role, **vals):
+            data = {F.RECORD_ACTION: role, F.GROUP_ID: "g1"}
+            data.update({schema.col(k) or k: v for k, v in vals.items()})
+            return Record(role, data, schema)
+
+        odd = rec("master", **{F.F_RECORD_ID: "00Q_ODD", F.F_FULL_NAME: "Mana Kawaguchi"})
+        a = rec("duplicate", **{F.F_RECORD_ID: "00Q_A", F.F_FULL_NAME: "Watanabe Hikaru"})
+        b = rec("duplicate", **{F.F_RECORD_ID: "00Q_B", F.F_FULL_NAME: "Watanabe Hikaru"})
+        surv = rec("surviving", **{F.F_RECORD_ID: "00Q_ODD", F.F_FULL_NAME: "Mana Kawaguchi"})
+        g = Group(group_id="g1", schema=schema, surviving=surv, master=odd, duplicates=[a, b])
+        return R.render([evaluate(g)], source="t.csv", total_rows=4)
+
+    def test_excluded_columns_say_uncheck(self):
+        html = self._partial_report()
+        assert ">Uncheck<span" in html
+        assert "col-excluded" in html
+
+    def test_no_record_is_still_called_master_or_duplicate(self):
+        """Those labels describe RingLead's proposal, which is being overridden."""
+        html = self._partial_report()
+        assert ">Master<span" not in html
+        assert ">Duplicate<span" not in html
+
+    def test_the_preview_column_is_relabelled(self):
+        """"After merge" would promise an outcome the recommendation prevents."""
+        html = self._partial_report()
+        assert "As proposed" in html
+
+
 class TestEmittedCss:
     def test_light_palette_lands_on_bare_root(self):
         """No colour may be defined only inside a media query or [data-theme] block."""
