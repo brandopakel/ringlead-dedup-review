@@ -34,6 +34,9 @@ data/
 # Generated reports embed the same PII
 reports/
 
+# Internal reference material (decks, taxonomies) — company-confidential
+reference/
+
 # PyCharm — vcs.xml and inspectionProfiles/ are shared intentionally
 .idea/workspace.xml
 .idea/tasks.xml

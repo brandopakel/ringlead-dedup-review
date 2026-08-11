@@ -57,10 +57,12 @@ SURVIVORSHIP_RULES = {
         "Prefer the most recently updated record.",
     ),
     "lead_tier_downgrade": (
-        "Field survivorship — Lead Tier",
-        "Prefer the strongest tier any record in the group holds (Tier 1 being "
-        "strongest). Tier is earned through qualification, so a merge should never "
-        "hand back a weaker one than a record already reached.",
+        "No survivorship change — Lead Tier is derived",
+        "Do NOT set a survivorship rule for Lead Tier. The Marketing Field Dictionary "
+        "(p3) states it is automatically re-evaluated whenever target-account status, "
+        "email, title or country changes, so Salesforce recomputes it after the merge. "
+        "A weaker tier in the preview means the wrong record is surviving — fix the "
+        "Email and Account rules above and the tier corrects itself.",
     ),
     "lifecycle_regression": (
         "Field survivorship — Lifecycle Stage",

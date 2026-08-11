@@ -774,17 +774,17 @@ def check_data_loss(g: Group) -> list[Finding]:
                 code="lead_tier_downgrade",
                 severity=CONTRIB,
                 weight=0,
-                title="Merge downgrades the lead tier",
-                detail="A record in this group carries a stronger tier than the survivor keeps.",
+                title="Merge lands on a weaker lead tier",
+                detail=(
+                    "Tier is derived and Salesforce re-evaluates it automatically, so "
+                    "do not set it by hand — check that the surviving email and Account "
+                    "are right and the tier follows."
+                ),
                 fields=[F.F_LEAD_TIER],
                 evidence=[
-                    ("Keeps", g.surviving.get(F.F_LEAD_TIER)),
-                    ("Discards", f"{best_rec.get(F.F_LEAD_TIER)} (on the {best_rec.label.lower()})"),
+                    ("Preview", g.surviving.get(F.F_LEAD_TIER)),
+                    ("Available", f"{best_rec.get(F.F_LEAD_TIER)} (on the {best_rec.label.lower()})"),
                 ],
-                corrections=[Correction(
-                    F.F_LEAD_TIER, best_rec.get(F.F_LEAD_TIER),
-                    "strongest tier any record in the group earned",
-                )],
             ))
 
     # --- narrative fields are unrecoverable once merged ----------------------

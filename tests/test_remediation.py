@@ -291,24 +291,38 @@ class TestAttribution:
         assert fixes.get(F.F_LEAD_SOURCE_DETAIL) != "Supercomputing-StLouis-2025", (
             "first-touch must not hand back the older event")
 
-    def test_a_merge_never_downgrades_the_lead_tier(self):
+    def test_lead_tier_is_never_written_by_hand(self):
+        """Tier is derived, and Salesforce re-evaluates it after the merge.
+
+        Marketing Field Dictionary p3: Lead Tier is "automatically re-evaluated
+        whenever any of these data points change". Writing a tier would either be
+        overwritten or would contradict the data it is computed from. A weaker tier
+        in the preview is a symptom of the wrong record surviving, so the finding
+        reports it and the Email/Account rules do the fixing.
+        """
         common = {F.F_FULL_NAME: "Fernando Aznar", F.F_COMPANY: "Microsoft"}
         m = rec("master", **{**common, F.F_RECORD_ID: "00Q_M", F.F_LEAD_TIER: "Tier 3"})
         d = rec("duplicate", **{**common, F.F_RECORD_ID: "00Q_D", F.F_LEAD_TIER: "Tier 1"})
         s = rec("surviving", **{**common, F.F_RECORD_ID: "00Q_M", F.F_LEAD_TIER: "Tier 3"})
         v = evaluate(group(m, [d], s))
-        end = (v.projected.group if v.projected else v.group).surviving
-        fixes = {c.column: c.value for c in v.corrections}
-        assert fixes.get(F.F_LEAD_TIER) == "Tier 1" or end.get(F.F_LEAD_TIER) == "Tier 1"
+        assert F.F_LEAD_TIER not in {c.column for c in v.corrections}
+        assert "lead_tier_downgrade" in {f.code for f in v.findings}, "still reported"
 
-    def test_an_unknown_tier_never_wins(self):
-        """"Tier X" is unranked and must not displace a real tier."""
-        common = {F.F_FULL_NAME: "Fernando Aznar", F.F_COMPANY: "Microsoft"}
-        m = rec("master", **{**common, F.F_RECORD_ID: "00Q_M", F.F_LEAD_TIER: "Tier 2"})
-        d = rec("duplicate", **{**common, F.F_RECORD_ID: "00Q_D", F.F_LEAD_TIER: "Tier X"})
-        s = rec("surviving", **{**common, F.F_RECORD_ID: "00Q_M", F.F_LEAD_TIER: "Tier 2"})
+    def test_non_buyer_carries_no_funnel_progress(self):
+        """Dictionary p16: Non-Buyer is "not qualified", and enrichment skips it."""
+        common = {F.F_FULL_NAME: "Kevin Sieck", F.F_COMPANY: "BairesDev"}
+        m = rec("master", **{**common, F.F_RECORD_ID: "00Q_M", F.F_LIFECYCLE: "Non-Buyer"})
+        d = rec("duplicate", **{**common, F.F_RECORD_ID: "00Q_D", F.F_LIFECYCLE: "SAL"})
+        s = rec("surviving", **{**common, F.F_RECORD_ID: "00Q_M", F.F_LIFECYCLE: "Non-Buyer"})
         fixes = {c.column: c.value for c in evaluate(group(m, [d], s)).corrections}
-        assert F.F_LEAD_TIER not in fixes
+        assert fixes.get(F.F_LIFECYCLE) == "SAL"
+
+    def test_recycled_sits_alongside_lead_not_above_it(self):
+        """Every MQL scenario reads "Pre-Lead, Lead or Recycled" as one starting set."""
+        from ringlead_qa.fields import LIFECYCLE_RANK
+        assert LIFECYCLE_RANK["recycled"] == LIFECYCLE_RANK["lead"]
+        assert LIFECYCLE_RANK["recycle"] == LIFECYCLE_RANK["lead"]
+        assert LIFECYCLE_RANK["sal"] > LIFECYCLE_RANK["recycled"]
 
     def test_age_still_decides_between_two_real_sources(self):
         """Among sources of equal standing the earliest is the genuine first touch."""

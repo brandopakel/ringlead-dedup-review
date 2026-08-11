@@ -264,9 +264,11 @@ LEAD_TIER_RANK = {
     "tier 1": 6, "tier 2": 5, "tier 3": 4, "tier 4": 3, "tier 5": 2, "tier x": 1,
 }
 
-#: Tiers 3 and 4 are defined by holding a *corporate* address; Tier 5 by a personal
-#: one. That makes the tier derivable from the email, so correcting the email can
-#: leave the tier describing an address the record no longer has.
+#: Tiers 3-4 require a corporate address and Tier 5 a personal one, so the tier is
+#: derived from the email. Crucially the dictionary (p3) states it is "automatically
+#: re-evaluated whenever any of these data points change" -- so Salesforce recomputes
+#: it after a merge and a tier must never be written by hand. A tier that drops on
+#: merge is a symptom of which record survived, and the email or Account is the lever.
 CORPORATE_EMAIL_TIERS = {"tier 3", "tier 4"}
 PERSONAL_EMAIL_TIER = "tier 5"
 
@@ -290,11 +292,35 @@ DEFAULT_LEAD_SOURCE_RANK = 1
 EVENT_SOURCE_MARKER = "event"
 
 # --- Funnel position ----------------------------------------------------------
-# Recycle/Non-Buyer are terminal-but-low: a record sitting there is not more advanced
-# than a live Lead, so they rank equal rather than above.
+# Taken from the Marketing Field Dictionary (Jan 2026), p16, rather than inferred:
+#
+#   Pre-Lead      enters with no marketing activity or engagement
+#   Lead          some engagement, not enough to qualify as MQL
+#   MQL           qualified as a Marketing Qualified Lead
+#   SAL           added to an Outreach Sequence by a BDR/AE/GAM
+#   SQL           added to a Stage 0 Opportunity
+#   Opportunity   added to a Stage 1+ Opportunity
+#   Customer      associated with a Customer Account
+#   Recycled      recycled by a BDR/AE/GAM
+#   Non-Buyer     not qualified
+#
+# Two placements the MQL rules settle. Every MQL scenario requires "Lifecycle Stage =
+# Pre-Lead, Lead or Recycled", so Recycled is a re-entry state alongside Lead rather
+# than a stage beyond it. Non-Buyer is absent from that list and enrichment skips it
+# outright ("Lifecycle Stage != Non Buyer", p26/p27), so it is terminal and carries
+# no progress -- a survivor landing there while another record shows engagement is a
+# real regression.
 LIFECYCLE_RANK = {
-    "pre-lead": 0, "lead": 1, "recycle": 1, "non-buyer": 1, "mql": 2,
-    "sal": 3, "sql": 4, "opportunity": 5, "customer": 6,
+    "pre-lead": 0,
+    "non-buyer": 0,
+    "lead": 1,
+    "recycle": 1,      # the export's spelling
+    "recycled": 1,     # the dictionary's spelling
+    "mql": 2,
+    "sal": 3,
+    "sql": 4,
+    "opportunity": 5,
+    "customer": 6,
 }
 
 # Order fields appear in the report; anything unlisted sorts after these.
