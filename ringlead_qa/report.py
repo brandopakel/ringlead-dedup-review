@@ -19,7 +19,7 @@ from collections import Counter
 from datetime import datetime
 
 from . import fields as F
-from . import tokens
+from . import fonts, tokens
 from .rules import Verdict
 
 STATUS_LABEL = {"skip": "Skip", "critical": "Fix", "review": "Review", "ok": "Clean"}
@@ -28,14 +28,14 @@ STYLES = """
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%}
 body{margin:0;background:hsl(var(--background));color:hsl(var(--foreground));
-  font:14px/1.5 ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  font:14px/1.5 var(--sans);
   font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased}
 .wrap{max-width:1280px;margin:0 auto;padding:36px 24px 96px}
-.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px}
+.mono{font-family:var(--mono);font-size:12px}
 :focus-visible{outline:2px solid hsl(var(--ring));outline-offset:2px;border-radius:4px}
 
 /* ---- header ---- */
-h1{font-size:20px;font-weight:650;letter-spacing:-.025em;margin:0}
+h1{font-size:20px;font-weight:600;letter-spacing:-.025em;margin:0}
 .brandrule{height:3px;width:64px;margin:9px 0 0;border-radius:2px;
   background:linear-gradient(90deg,hsl(var(--destructive)),hsl(var(--skip)),hsl(var(--info)))}
 .sub{color:hsl(var(--muted-foreground));font-size:13px;margin:10px 0 0}
@@ -75,7 +75,7 @@ h1{font-size:20px;font-weight:650;letter-spacing:-.025em;margin:0}
 .sys .cnt{font-weight:600;font-size:13px;min-width:38px;text-align:right;
   color:hsl(var(--info))}
 .sys code{font-size:12px;background:hsl(var(--muted));padding:1px 6px;
-  border-radius:4px;font-family:ui-monospace,Menlo,monospace}
+  border-radius:4px;font-family:var(--mono)}
 .sys .adv{color:hsl(var(--muted-foreground));display:block;margin-top:3px}
 
 /* ---- toolbar ---- */
@@ -98,7 +98,7 @@ h1{font-size:20px;font-weight:650;letter-spacing:-.025em;margin:0}
 .sep{width:1px;height:20px;background:hsl(var(--border));margin:0 4px}
 .spacer{flex:1}
 .tally{color:hsl(var(--muted-foreground));font-size:12px;white-space:nowrap}
-.kbd{font-family:ui-monospace,Menlo,monospace;font-size:10px;
+.kbd{font-family:var(--mono);font-size:10px;
   border:1px solid hsl(var(--border));border-bottom-width:2px;border-radius:4px;
   padding:1px 5px;color:hsl(var(--muted-foreground));background:hsl(var(--muted))}
 
@@ -133,7 +133,7 @@ h1{font-size:20px;font-weight:650;letter-spacing:-.025em;margin:0}
 .grp.skip{border-left:3px solid hsl(var(--skip))}
 .gidbar{display:flex;align-items:center;gap:10px;padding:10px 0 2px;flex-wrap:wrap}
 .gidlbl{font-size:11px;color:hsl(var(--muted-foreground))}
-.gidval{font:inherit;font-family:ui-monospace,Menlo,monospace;font-size:13px;
+.gidval{font:inherit;font-family:var(--mono);font-size:13px;
   border:1px solid hsl(var(--input));border-radius:calc(var(--radius) - 2px);
   background:hsl(var(--muted));color:hsl(var(--foreground));padding:3px 9px;width:13ch}
 .gidhint{font-size:11px;color:hsl(var(--muted-foreground));opacity:.75}
@@ -191,7 +191,7 @@ tbody tr:last-child th,tbody tr:last-child td{border-bottom:0}
 thead th{background:hsl(var(--muted));font-size:11px;font-weight:500;
   color:hsl(var(--muted-foreground))}
 thead .sf{display:block;font-weight:400;opacity:.65;
-  font-family:ui-monospace,Menlo,monospace;font-size:10px}
+  font-family:var(--mono);font-size:10px}
 th.fld{font-weight:400;color:hsl(var(--muted-foreground));white-space:normal;
   width:180px;font-size:12px}
 .col-master{border-left:2px solid hsl(var(--success));border-right:2px solid hsl(var(--success))}
@@ -232,7 +232,7 @@ tr.flagged th.fld{box-shadow:inset 3px 0 0 hsl(var(--info));
 #: The stylesheet the report ships: token contract first, then rules that may only
 #: reference those tokens. tests/test_tokens.py fails the build if a rule below
 #: names a token this contract does not define, or writes a raw colour literal.
-CSS = tokens.css_variables() + STYLES
+CSS = fonts.face_rules() + tokens.css_variables() + STYLES
 
 JS = """
 const groups=[...document.querySelectorAll('.grp')];

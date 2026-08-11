@@ -62,6 +62,30 @@ class TestStylesheetObeysTheContract:
         assert radii <= allowed, f"unexpected radius values: {sorted(radii - allowed)}"
 
 
+class TestBrandTypography:
+    """The template treats Geist as brand-approved, not as a preference."""
+
+    def test_faces_are_embedded_not_linked(self):
+        from ringlead_qa import fonts
+        rules = fonts.face_rules()
+        assert rules.count("@font-face") == 2
+        assert "data:font/woff2;base64," in rules
+        assert "http" not in rules, "a linked font breaks the offline guarantee"
+
+    def test_both_stacks_fall_back_to_system_faces(self):
+        """A checkout without the binaries must still render something sane."""
+        from ringlead_qa import fonts
+        assert fonts.SANS.startswith('"Geist"') and "sans-serif" in fonts.SANS
+        assert fonts.MONO.startswith('"Geist Mono"') and "monospace" in fonts.MONO
+
+    def test_stylesheet_names_no_font_family_directly(self):
+        """Families come from tokens, the same discipline the colours follow."""
+        import re
+        from ringlead_qa import report
+        for decl in re.findall(r"font-family:([^;}]+)", report.STYLES):
+            assert "var(--" in decl, f"hard-coded family: {decl.strip()}"
+
+
 class TestEmittedCss:
     def test_light_palette_lands_on_bare_root(self):
         """No colour may be defined only inside a media query or [data-theme] block."""

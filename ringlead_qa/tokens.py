@@ -85,10 +85,12 @@ SCALE: dict[str, str] = {
     "radius": "0.5rem",
 }
 
-#: Font stacks by role. No webfonts -- the report must render offline from disk.
+#: Type stacks, exposed as tokens so the stylesheet never names a family directly.
+#: The faces themselves are embedded by `fonts.py`; these are the fallbacks around
+#: them, and they keep the report readable if the assets are ever missing.
 FONTS = {
-    "sans": 'ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif',
-    "mono": "ui-monospace,SFMono-Regular,Menlo,Consolas,monospace",
+    "sans": None,   # filled from fonts.SANS at emit time
+    "mono": None,   # filled from fonts.MONO at emit time
 }
 
 #: Type ramp, in px, for reference when editing stylesheets.
@@ -105,13 +107,17 @@ def css_variables() -> str:
     three -- and means no colour is ever defined *only* inside a conditional block,
     which is the classic unreadable-page bug.
     """
+    from . import fonts  # local import: tokens stays importable without the assets
+
+    type_tokens = {"sans": fonts.SANS, "mono": fonts.MONO}
+
     def block(palette: dict[str, str], extra: dict[str, str] | None = None) -> str:
         rows = [f"  --{name}:{value};" for name, value in palette.items()]
         rows += [f"  --{k}:{v};" for k, v in (extra or {}).items()]
         return "\n".join(rows)
 
     return (
-        ":root{\n" + block(LIGHT, SCALE) + "\n}\n"
+        ":root{\n" + block(LIGHT, {**SCALE, **type_tokens}) + "\n}\n"
         "@media (prefers-color-scheme:dark){:root:not([data-theme=light]){\n"
         + block(DARK) + "\n}}\n"
         ":root[data-theme=dark]{\n" + block(DARK) + "\n}\n"
@@ -120,4 +126,4 @@ def css_variables() -> str:
 
 def defined_tokens() -> set[str]:
     """Every token name a stylesheet is allowed to reference."""
-    return set(LIGHT) | set(SCALE)
+    return set(LIGHT) | set(SCALE) | set(FONTS)

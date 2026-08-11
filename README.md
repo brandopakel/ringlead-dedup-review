@@ -48,6 +48,20 @@ python main.py --open
 
 Needs Python 3.10 or newer (`python3 --version` to check).
 
+## Branding
+
+The report follows the MinIO brand rather than a generic theme. Colours are sampled
+from the Marketing Field Dictionary — brand red `#CF163D`, the deep plum ground
+`#100A30`, the violet `#5454E4` — and live in `ringlead_qa/tokens.py`. The typeface
+is Geist, as the presentation template specifies, embedded from
+`ringlead_qa/assets/` as a data URI so the report stays readable offline and when
+emailed. Geist is SIL Open Font Licensed; the licence ships beside the fonts.
+
+Severity stays separable from chrome: brand red means "needs a fix", the violet is
+the interactive accent, and green stays on "survives" because that is RingLead's own
+language for a merge outcome. `tests/test_tokens.py` enforces all of it — no colour
+literal and no font family may appear in the stylesheet.
+
 ## Reading the report
 
 Findings sort worst-first, and the four statuses mean four different actions:
@@ -164,6 +178,20 @@ weight 0 — it still renders as context but can never push a group into the que
 the sample export that zeroes `owner_change` (250/460), `original_source_overwritten`
 (169), `account_conflict` (160) and `high_value_loss` (135). Skipping this discipline
 flags over half the file and defeats the tool.
+
+## Branding
+
+The report follows the MinIO brand rather than a generic theme. Colours are sampled
+from the Marketing Field Dictionary — brand red `#CF163D`, the deep plum ground
+`#100A30`, the violet `#5454E4` — and live in `ringlead_qa/tokens.py`. The typeface
+is Geist, as the presentation template specifies, embedded from
+`ringlead_qa/assets/` as a data URI so the report stays readable offline and when
+emailed. Geist is SIL Open Font Licensed; the licence ships beside the fonts.
+
+Severity stays separable from chrome: brand red means "needs a fix", the violet is
+the interactive accent, and green stays on "survives" because that is RingLead's own
+language for a merge outcome. `tests/test_tokens.py` enforces all of it — no colour
+literal and no font family may appear in the stylesheet.
 
 ## Reading the report
 
