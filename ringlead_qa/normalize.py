@@ -8,6 +8,7 @@ slash. Everything that decides whether two values "agree" funnels through here.
 
 from __future__ import annotations
 
+import difflib
 import re
 
 FREE_EMAIL_DOMAINS = {
@@ -137,6 +138,40 @@ def linkedin_forms_comparable(values) -> bool:
     """
     forms = {"urn" if _LINKEDIN_URN.match(v) else "slug" for v in values if v}
     return len(forms) < 2
+
+
+#: Name tokens that identify nothing -- form junk, placeholders, filenames that
+#: landed in a Name field. They must not be treated as evidence either way.
+JUNK_NAME_TOKENS = {
+    "not", "provided", "unknown", "none", "null", "test", "attachment", "email",
+    "contact", "sales", "info", "admin", "user", "person",
+}
+
+
+def meaningful_name_tokens(value) -> frozenset[str]:
+    return frozenset(
+        t for t in name_tokens(value) if len(t) > 2 and t not in JUNK_NAME_TOKENS
+    )
+
+
+def names_are_related(a, b) -> bool:
+    """Do two names plausibly belong to the same person?
+
+    True when they share any meaningful token, allowing for transliteration slips
+    (Mohamed/Mohammed, Sorour/Srrour). Sharing the surname is what carries nicknames
+    and reversed name order: Michael/Mike Dempsey and "Bhavin Dave"/"Dave Bhavin"
+    both pass, while "Sneha Gopalakrishnan" and "Harsimran Singh" do not.
+
+    Returns True when either side has nothing meaningful to compare -- absence of a
+    name is not evidence of a different person.
+    """
+    ta, tb = meaningful_name_tokens(a), meaningful_name_tokens(b)
+    if not ta or not tb:
+        return True
+    return any(
+        x == y or difflib.SequenceMatcher(None, x, y).ratio() >= 0.82
+        for x in ta for y in tb
+    )
 
 
 def person_name(value) -> str:

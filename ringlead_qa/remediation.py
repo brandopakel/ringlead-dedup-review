@@ -86,6 +86,14 @@ SURVIVORSHIP_RULES = {
         "export 85% of these groups could not be verified as the same person, "
         "against 13% of groups with a real Company — 6.5x the rate.",
     ),
+    "name_conflict": (
+        "Match criteria — require the names to agree",
+        "These groups pair records whose names share nothing: not a nickname, a "
+        "reversed order, or a spelling variant. They match on identifiers that "
+        "enrichment attached to the wrong record. Require a name check in the match "
+        "rule, and treat a LinkedIn or ZoomInfo ID as corroboration rather than as "
+        "sufficient grounds on its own.",
+    ),
     "identity_unverified": (
         "Match criteria — require a second identifier",
         "These groups match on name and company alone. Require a second identifier — "

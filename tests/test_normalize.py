@@ -139,6 +139,35 @@ class TestNames:
         assert N.person_name("Chris Shifflett") != N.person_name("Christopher Shifflett")
 
 
+class TestNameRelatedness:
+    """Enrichment mis-attaches identifiers, so names get an independent vote."""
+
+    @pytest.mark.parametrize("a,b", [
+        ("Michael Dempsey", "Mike Dempsey"),        # nickname, shared surname
+        ("Bhavin Dave", "Dave Bhavin"),             # reversed order
+        ("Mohamed Sorour", "Mohammed Srrour"),      # transliteration slips
+        ("Thomas Wood", "Tom Wood"),
+        ("Eric Ceccotti", "Eric _"),                # truncated but shared token
+    ])
+    def test_related_names(self, a, b):
+        assert N.names_are_related(a, b)
+
+    @pytest.mark.parametrize("a,b", [
+        ("Sneha Gopalakrishnan", "Harsimran Singh"),
+        ("Bev Tucker", "Diwakar Arumugam"),
+        ("Joshua Deffibaugh", "Josh Davis"),        # nickname, different surname
+        ("John Lu", "jack lee"),
+        ("Kathy Weir", "CDPrasad ."),
+    ])
+    def test_unrelated_names(self, a, b):
+        assert not N.names_are_related(a, b)
+
+    @pytest.mark.parametrize("junk", ["[not provided]", "Sales", "_", ""])
+    def test_placeholders_are_not_evidence(self, junk):
+        """An absent name says nothing; it must not accuse anyone."""
+        assert N.names_are_related("Eric Ceccotti", junk)
+
+
 class TestTitles:
     @pytest.mark.parametrize("bad", ["", "Other", "n/a", "UNKNOWN", "-"])
     def test_placeholder_titles_rejected(self, bad):

@@ -395,6 +395,31 @@ class TestIdentitySignalStrength:
         assert "identity_unverified" in {f.code for f in v.findings}
 
 
+class TestNamesOutrankEnrichment:
+    def test_matching_identifiers_do_not_merge_two_names(self):
+        """A real group: one LinkedIn slug and Contact ID across two people."""
+        m = rec("master", **{F.F_RECORD_ID: "00Q_M", F.F_FULL_NAME: "Sneha Gopalakrishnan",
+                             F.F_EMAIL: "sneha.g@precisely.com",
+                             F.F_LINKEDIN: "in/sneha-gopalakrishnan", F.F_ZI_CONTACT: "4166795145"})
+        d = rec("duplicate", **{F.F_RECORD_ID: "00Q_D", F.F_FULL_NAME: "Harsimran Singh",
+                                F.F_EMAIL: "harsimran-singh@microfocus.com",
+                                F.F_LINKEDIN: "in/sneha-gopalakrishnan", F.F_ZI_CONTACT: "4166795145"})
+        s = rec("surviving", **{F.F_RECORD_ID: "00Q_M", F.F_FULL_NAME: "Sneha Gopalakrishnan",
+                                F.F_EMAIL: "sneha.g@precisely.com"})
+        v = evaluate(group(m, [d], s))
+        assert v.status == "skip", "identifiers agreeing must not override the names"
+        assert not v.corrections
+
+    def test_a_nickname_is_not_a_name_conflict(self):
+        m = rec("master", **{F.F_RECORD_ID: "00Q_M", F.F_FULL_NAME: "Michael Dempsey",
+                             F.F_EMAIL: "mike@acme.com"})
+        d = rec("duplicate", **{F.F_RECORD_ID: "00Q_D", F.F_FULL_NAME: "Mike Dempsey",
+                                F.F_EMAIL: "mike@acme.com"})
+        s = rec("surviving", **{F.F_RECORD_ID: "00Q_M", F.F_FULL_NAME: "Michael Dempsey",
+                                F.F_EMAIL: "mike@acme.com"})
+        assert evaluate(group(m, [d], s)).status != "skip"
+
+
 class TestIdentityCorroboration:
     def test_identical_email_outranks_a_vendor_id_clash(self):
         """An address identifies one mailbox; it cannot be two people."""

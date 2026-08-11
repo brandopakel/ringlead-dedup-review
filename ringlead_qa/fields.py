@@ -162,8 +162,15 @@ CONTACT = EntitySpec(
         F_COMPANY: ["Account :: Name", "Account Name", "Company"],
         F_ACCOUNT_ID: ["Account :: ID", "Account ID"],
         F_ACCOUNT_NAME: ["Account :: Name", "Account Name"],
-        F_LEAD_STATUS: ["Contact Status", "Status"],
-        F_UNQUALIFIED: ["Unqualified Reason"],
+        # Names verified against a real Contact export: the object carries "Lead
+        # Status" rather than a Contact-specific one, an "Unqualified code" rather
+        # than a reason, and HubSpot-prefixed notes.
+        F_LEAD_STATUS: ["Lead Status", "HS Lead Status", "Contact Status", "Status"],
+        F_UNQUALIFIED: ["Unqualified code", "Unqualified Reason"],
+        F_NOTES: ["HubSpot Notes", "Notes"],
+        # A Contact has no Domain column; Company Domain Name is the equivalent.
+        F_DOMAIN: ["Company Domain Name", "Domain"],
+        F_ZI_ENRICH_DATE: ["EnrichedOn", "ZoomInfo Enrich Date"],
     },
     identity=[
         (F_LINKEDIN, "linkedin", "LinkedIn profile", "key"),

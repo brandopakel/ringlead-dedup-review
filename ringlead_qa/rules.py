@@ -192,6 +192,33 @@ def check_identity(g: Group) -> list[Finding]:
         if len(locals_) == 1 and N.localpart_matches_name(emails[0], name):
             agreed.append((F.F_EMAIL, "email name", sorted(emails)))
 
+    # Names are checked independently of the identity signals, and deliberately are
+    # not suppressed by them. Enrichment writes LinkedIn slugs and ZoomInfo IDs onto
+    # records, and it gets them wrong: one group carried a single LinkedIn profile
+    # and Contact ID across records named "Sneha Gopalakrishnan" and "Harsimran
+    # Singh". Treating that agreement as proof would merge two people on the
+    # strength of a vendor's mistake, so a name that shares nothing outranks it.
+    unrelated = [
+        (a, b) for i, a in enumerate(g.records) for b in g.records[i + 1:]
+        if not N.names_are_related(a.get(F.F_FULL_NAME), b.get(F.F_FULL_NAME))
+    ]
+    if unrelated:
+        shown = sorted({
+            r.get(F.F_FULL_NAME) for pair in unrelated for r in pair if r.get(F.F_FULL_NAME)
+        })
+        out.append(Finding(
+            code="name_conflict",
+            severity=CRITICAL,
+            title="Records name different people",
+            detail=(
+                "These names share nothing — not a nickname, a reversed order or a "
+                "spelling variant. Matching identifiers do not outweigh that; "
+                "enrichment attaches them to the wrong record often enough."
+            ),
+            fields=[F.F_FULL_NAME, F.F_EMAIL],
+            evidence=[("Names", " · ".join(shown[:5]))],
+        ))
+
     double_import = same_import(g)
     for col, name, vals, strength in conflicted:
         # Something else about these records already matched. One signal disagreeing
@@ -977,7 +1004,7 @@ class Verdict:
         record's email and employer onto the survivor would fuse two different
         people. The right output there is "look at this", not "set these values".
         """
-        if any(f.code == "identity_conflict" for f in self.findings):
+        if any(f.code in ("identity_conflict", "name_conflict") for f in self.findings):
             return (
                 "These records may not be the same person, so no values are "
                 "recommended — confirm the match first."
