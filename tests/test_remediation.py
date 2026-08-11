@@ -479,6 +479,47 @@ class TestSheetRouting:
         assert list(masters["Current master"]) == ["00Q_MASTER"]
         assert list(masters["Should be master"]) == ["00Q_DUP"]
 
+    def test_a_promotion_never_trades_away_a_correct_employer(self):
+        """An inactive owner is reassignable; a wrong employer is not.
+
+        This group once promoted the MilliporeSigma record because its owner was
+        active, then emitted four hand-edits setting Email, Account and Domain back
+        to EyeCare Partners -- undoing its own recommendation.
+        """
+        common = {F.F_FULL_NAME: "Ravindar Eppakayala", F.F_COMPANY: "EyeCare Partners"}
+        master = rec("master", **{**common, F.F_RECORD_ID: "00Q_RIGHT",
+                                  F.F_EMAIL: "ravindareppakayala@eyecare-partners.com",
+                                  F.F_ACCOUNT_NAME: "EyeCare Partners",
+                                  F.F_DOMAIN: "eyecare-partners.com",
+                                  F.F_OWNER_ACTIVE: "false", F.F_OWNER_NAME: "Departed Rep"})
+        dup = rec("duplicate", **{**common, F.F_RECORD_ID: "00Q_WRONG",
+                                  F.F_EMAIL: "ravindar.eppakayala@milliporesigma.com",
+                                  F.F_ACCOUNT_NAME: "MILLIPORE SIGMA",
+                                  F.F_DOMAIN: "milliporesigma.com",
+                                  F.F_OWNER_ACTIVE: "true", F.F_OWNER_NAME: "Active Rep"})
+        surv = rec("surviving", **{**common, F.F_RECORD_ID: "00Q_RIGHT",
+                                   F.F_EMAIL: "ravindareppakayala@eyecare-partners.com",
+                                   F.F_ACCOUNT_NAME: "EyeCare Partners",
+                                   F.F_DOMAIN: "eyecare-partners.com"})
+        v = evaluate(group(master, [dup], surv))
+        assert v.master_change is None, "keep the correct master; reassign its owner"
+        assert not v.corrections, "and nothing needs undoing"
+        finding = next(f for f in v.findings if f.code == "master_owner_inactive")
+        assert "Reassign the owner" in finding.detail
+
+    def test_the_owner_promotion_still_applies_when_nothing_is_traded_away(self):
+        """The guard is narrow: it only blocks promotions that lose the employer."""
+        common = {F.F_FULL_NAME: "Dana Reyes", F.F_COMPANY: "Northwind",
+                  F.F_EMAIL: "dreyes@northwind.com", F.F_DOMAIN: "northwind.com"}
+        master = rec("master", **{**common, F.F_RECORD_ID: "00Q_M",
+                                  F.F_OWNER_ACTIVE: "false", F.F_OWNER_NAME: "Departed"})
+        dup = rec("duplicate", **{**common, F.F_RECORD_ID: "00Q_D",
+                                  F.F_OWNER_ACTIVE: "true", F.F_OWNER_NAME: "Active"})
+        surv = rec("surviving", **{**common, F.F_RECORD_ID: "00Q_M"})
+        v = evaluate(group(master, [dup], surv))
+        assert v.master_change is not None
+        assert v.master_change.record.record_id == "00Q_D"
+
     def test_a_master_change_can_remove_the_need_for_field_edits(self):
         """If promoting the right record already fixes the value, do not also ask for it."""
         common = {F.F_FULL_NAME: "Inigo Monreal", F.F_COMPANY: "Expedia Group",

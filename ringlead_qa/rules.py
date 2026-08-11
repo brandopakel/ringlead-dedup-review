@@ -540,8 +540,27 @@ def check_employment(g: Group) -> list[Finding]:
 # Master choice: is the right record winning?
 # --------------------------------------------------------------------------
 
+def _holds_current_employer(rec: Record, company: str) -> bool:
+    """Does this record's address belong to the employer the survivor claims?"""
+    address = N.email(rec.get(F.F_EMAIL))
+    return bool(
+        company and address and not N.is_placeholder_company(company)
+        and N.company_matches_domain(company, N.email_domain(address))
+    )
+
+
 def check_master_choice(g: Group) -> list[Finding]:
     out: list[Finding] = []
+    company = g.surviving.get(F.F_COMPANY)
+    # Ownership and activity are routing facts; the employer identity is the record
+    # itself. Promoting a record for its owner when the master already holds the
+    # right email and Account trades a correct survivor for a reassignable one --
+    # and the employer rules then emit up to seven hand-edits undoing the promotion.
+    # A deactivated owner is fixed by reassigning the owner, not by changing master.
+    master_holds_employer = _holds_current_employer(g.master, company)
+
+    def may_promote(candidate: Record) -> bool:
+        return not (master_holds_employer and not _holds_current_employer(candidate, company))
 
     master_act = g.master.get(F.F_ACTIVITY)
     master_born = g.master.get(F.F_CREATED)[:10]
@@ -559,11 +578,15 @@ def check_master_choice(g: Group) -> list[Finding]:
         # When the composite timestamps agree with the activity dates, the master
         # really is the colder record rather than just the one missing activity data.
         corroborated = recency(rec) > recency(g.master)
+        promote_stale = may_promote(rec)
         out.append(Finding(
             code="master_stale",
             severity=REVIEW,
             title="A duplicate is more active than the master",
             detail=(
+                "The master holds the current employer's email, so keep it — the "
+                "duplicate's activity is worth a look but not a master change."
+                if not promote_stale else
                 "Both activity and update timestamps favour the duplicate."
                 if corroborated else
                 "The livelier record may deserve to win."
@@ -580,17 +603,24 @@ def check_master_choice(g: Group) -> list[Finding]:
                     f"{master_act or 'no recorded activity'}"
                 ),
                 corroborated=corroborated,
-            ),
+            ) if promote_stale else None,
         ))
 
     master_owner_dead = N.lower(g.master.get(F.F_OWNER_ACTIVE)) == "false"
     live_dup = next((d for d in g.duplicates if N.truthy(d.get(F.F_OWNER_ACTIVE))), None)
     if master_owner_dead and live_dup is not None:
+        promote_owner = may_promote(live_dup)
         out.append(Finding(
             code="master_owner_inactive",
             severity=REVIEW,
             title="Master is owned by a deactivated user",
-            detail="The merge parks this lead with someone who has left.",
+            detail=(
+                "Reassign the owner rather than changing master — the master holds "
+                "the current employer's email, and promoting the other record would "
+                "have to be undone field by field."
+                if not promote_owner else
+                "The merge parks this lead with someone who has left."
+            ),
             fields=[F.F_OWNER_NAME, F.F_OWNER_ACTIVE],
             evidence=[
                 ("Master owner", f"{g.master.get(F.F_OWNER_NAME) or 'unknown'} (inactive)"),
@@ -603,7 +633,7 @@ def check_master_choice(g: Group) -> list[Finding]:
                     f"who is still active"
                 ),
                 corroborated=True,
-            ),
+            ) if promote_owner else None,
         ))
     elif g.surviving.get(F.F_OWNER_NAME) and len({
         r.get(F.F_OWNER_NAME) for r in g.records if r.get(F.F_OWNER_NAME)
