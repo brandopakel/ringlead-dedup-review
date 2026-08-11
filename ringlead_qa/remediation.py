@@ -87,6 +87,13 @@ SURVIVORSHIP_RULES = {
         "Add “owner is active” as a criterion, so leads stop landing with reps who "
         "have left.",
     ),
+    "richer_record_available": (
+        "Master selection — completeness",
+        "Weight record completeness when choosing the master: an Account link, an "
+        "activity history and an email address are things a merge cannot recover if "
+        "the emptier record wins. Funnel stage and Channel can be fixed by field "
+        "survivorship; these cannot.",
+    ),
     "master_stale": (
         "Master selection — activity recency",
         "Weight Most Recent Activity Date more heavily when choosing the master.",

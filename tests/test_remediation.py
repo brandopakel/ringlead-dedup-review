@@ -420,6 +420,49 @@ class TestNamesOutrankEnrichment:
         assert evaluate(group(m, [d], s)).status != "skip"
 
 
+class TestRicherRecordWins:
+    """Promotion must bring something corrections cannot."""
+
+    def _pair(self, master_extra, dup_extra):
+        common = {F.F_FULL_NAME: "Mike Waldrum", F.F_COMPANY: "Everpure"}
+        m = rec("master", **{**common, F.F_RECORD_ID: "00Q_THIN", **master_extra})
+        d = rec("duplicate", **{**common, F.F_RECORD_ID: "00Q_FULL", **dup_extra})
+        s = rec("surviving", **{**common, F.F_RECORD_ID: "00Q_THIN", **master_extra})
+        return group(m, [d], s)
+
+    def test_a_record_carrying_missing_data_is_promoted(self):
+        v = evaluate(self._pair(
+            {F.F_LIFECYCLE: "Pre-Lead", F.F_CHANNEL: "Outbound"},
+            {F.F_LIFECYCLE: "Lead", F.F_CHANNEL: "Inbound",
+             F.F_ACCOUNT_ID: "001_EV", F.F_ACTIVITY: "2024-05-07"},
+        ))
+        assert v.master_change is not None
+        assert v.master_change.record.record_id == "00Q_FULL"
+
+    def test_ranked_fields_alone_do_not_justify_a_promotion(self):
+        """Lifecycle and Channel are correctable; promoting for them adds nothing."""
+        v = evaluate(self._pair(
+            {F.F_LIFECYCLE: "Pre-Lead", F.F_CHANNEL: "Outbound", F.F_ACTIVITY: "2024-01-01"},
+            {F.F_LIFECYCLE: "Lead", F.F_CHANNEL: "Inbound", F.F_ACTIVITY: "2024-01-01"},
+        ))
+        assert v.master_change is None
+        fixes = {c.column for c in v.corrections}
+        assert F.F_LIFECYCLE in fixes and F.F_CHANNEL in fixes
+
+    def test_one_missing_field_alone_is_not_enough(self):
+        """A single gain could be noise; two dimensions makes it a pattern."""
+        v = evaluate(self._pair({}, {F.F_ACCOUNT_ID: "001_EV"}))
+        assert v.master_change is None
+
+    def test_a_promotion_still_never_loses_the_employer(self):
+        v = evaluate(self._pair(
+            {F.F_EMAIL: "mike@everpure.com", F.F_LIFECYCLE: "Pre-Lead"},
+            {F.F_EMAIL: "mike@parseclabs.com", F.F_LIFECYCLE: "Lead",
+             F.F_ACCOUNT_ID: "001_X", F.F_ACTIVITY: "2024-05-07"},
+        ))
+        assert v.master_change is None, "the master holds the current employer"
+
+
 class TestChannelStrength:
     """Partner beats Inbound beats Outbound; the strongest is true of the person."""
 

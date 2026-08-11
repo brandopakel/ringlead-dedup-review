@@ -652,6 +652,65 @@ def check_master_choice(g: Group) -> list[Finding]:
             ) if promote_stale else None,
         ))
 
+    # --- a duplicate that is simply the better record ------------------------
+    # Promotion has to earn its place against the alternative, which is a list of
+    # field corrections. Ranking higher on Lifecycle or Channel earns nothing --
+    # corrections already deliver those. What corrections cannot deliver is data the
+    # master does not have: an Account link, an activity history, an address. So a
+    # promotion is recommended only when the duplicate brings at least one of those,
+    # and is ahead on at least two dimensions in total.
+    #
+    # Lead Tier is deliberately not a dimension. It is derived from the email,
+    # Account, title and country, so counting it would count those inputs twice.
+    def strengths(candidate: Record) -> tuple[list[str], list[str]]:
+        brings, ahead = [], []
+        for key, rank, label in (
+            (F.F_LIFECYCLE, F.LIFECYCLE_RANK, "a further funnel stage"),
+            (F.F_CHANNEL, F.CHANNEL_RANK, "a stronger channel"),
+        ):
+            mine = rank.get(N.lower(g.master.get(key)))
+            theirs = rank.get(N.lower(candidate.get(key)))
+            if theirs is not None and (mine is None or theirs > mine):
+                ahead.append(label)
+        for key, label in (
+            (F.F_ACCOUNT_ID, "an Account link"),
+            (F.F_ACTIVITY, "an activity history"),
+            (F.F_EMAIL, "an email address"),
+        ):
+            if candidate.get(key) and not g.master.get(key):
+                brings.append(label)
+        if N.truthy(candidate.get(F.F_OWNER_ACTIVE)) and master_owner_dead_flag:
+            brings.append("an active owner")
+        return brings, ahead
+
+    master_owner_dead_flag = N.lower(g.master.get(F.F_OWNER_ACTIVE)) == "false"
+    richer = None
+    for candidate in g.duplicates:
+        brings, ahead = strengths(candidate)
+        if not brings or len(brings) + len(ahead) < 2 or not may_promote(candidate):
+            continue
+        if richer is None or len(brings) + len(ahead) > richer[1]:
+            richer = (candidate, len(brings) + len(ahead), brings, ahead)
+    if richer is not None:
+        candidate, total, brings, ahead = richer
+        gained = ", ".join(brings) + ("" if not ahead else " and has " + ", ".join(ahead))
+        out.append(Finding(
+            code="richer_record_available",
+            severity=REVIEW,
+            title="A duplicate is the fuller record",
+            detail=(
+                "Promoting it carries this across in one change; the master cannot "
+                "be corrected into it field by field."
+            ),
+            fields=[F.F_ACCOUNT_NAME, F.F_ACTIVITY, F.F_LIFECYCLE, F.F_CHANNEL],
+            evidence=[("Brings", gained)],
+            master_change=MasterChange(
+                record=candidate,
+                why=f"brings {gained}",
+                corroborated=total >= 3,
+            ),
+        ))
+
     master_owner_dead = N.lower(g.master.get(F.F_OWNER_ACTIVE)) == "false"
     live_dup = next((d for d in g.duplicates if N.truthy(d.get(F.F_OWNER_ACTIVE))), None)
     if master_owner_dead and live_dup is not None:
