@@ -19,62 +19,63 @@ from __future__ import annotations
 
 # --- Neutral + semantic roles -------------------------------------------------
 # Structural roles are named for their job, not their colour, so a re-theme is a
-# change here and nowhere else. The palette is shadcn/ui's zinc scale.
+# change here and nowhere else. The palette is MinIO's, sampled from the Marketing
+# Field Dictionary: brand red #CF163D, the deep plum ground #100A30 behind the title
+# slide, and the violet #5454E4 from its gradient. shadcn/ui's structure is kept;
+# only the hues are ours.
 LIGHT: dict[str, str] = {
-    # surfaces and text
+    # surfaces and text. The plum bias in the neutrals is lifted from the deck's
+    # ground (#100A30) so greys read as chosen rather than defaulted.
     "background": "0 0% 100%",
-    "foreground": "240 10% 3.9%",
+    "foreground": "250 24% 10%",
     "card": "0 0% 100%",
-    "muted": "240 4.8% 95.9%",
-    "muted-foreground": "240 3.8% 46.1%",
+    "muted": "250 20% 96%",
+    "muted-foreground": "250 10% 42%",
     # lines and controls
-    "border": "240 5.9% 90%",
-    "input": "240 5.9% 90%",
-    "ring": "240 5.9% 10%",
-    "primary": "240 5.9% 10%",
-    "primary-foreground": "0 0% 98%",
-    "accent": "240 4.8% 95.9%",
-    "accent-foreground": "240 5.9% 10%",
-    # status. Separate from the accent hue on purpose: severity must never be
-    # confused with "this is interactive".
-    "destructive": "0 72% 51%",
-    "warning": "35 92% 40%",
+    "border": "250 16% 90%",
+    "input": "250 16% 88%",
+    "ring": "240 73% 58%",
+    "primary": "250 24% 12%",
+    "primary-foreground": "0 0% 100%",
+    "accent": "250 20% 95%",
+    "accent-foreground": "250 24% 12%",
+    # status. Brand red carries "needs a fix" because attention is what it is for;
+    # the interactive accent is the brand violet, so severity never reads as chrome.
+    "destructive": "347 81% 45%",
+    "warning": "35 92% 38%",
     "success": "142 71% 33%",
-    "info": "221 83% 53%",
-    # "do not merge" -- a distinct action from "fix a value", so a distinct hue
-    "skip": "271 76% 45%",
+    "info": "240 73% 58%",
+    "skip": "315 58% 44%",
     # domain colours -- RingLead's own language for a merge outcome
-    "survive-bg": "142 60% 94%",
-    "lost-bg": "349 90% 96%",
-    # Text drawn on top of a solid status fill. It flips between themes rather than
-    # staying white: the dark palette lifts the status hues, and white on a lifted
-    # green falls below readable contrast.
+    "survive-bg": "142 55% 94%",
+    "lost-bg": "347 85% 96%",
+    # Text on a solid status fill; flips by theme so contrast holds on both.
     "on-status": "0 0% 100%",
 }
 
 DARK: dict[str, str] = {
-    "background": "240 10% 3.9%",
-    "foreground": "0 0% 98%",
-    "card": "240 10% 5.5%",
-    "muted": "240 3.7% 15.9%",
-    "muted-foreground": "240 5% 64.9%",
-    "border": "240 3.7% 17%",
-    "input": "240 3.7% 17%",
-    "ring": "240 4.9% 83.9%",
-    "primary": "0 0% 98%",
-    "primary-foreground": "240 5.9% 10%",
-    "accent": "240 3.7% 15.9%",
-    "accent-foreground": "0 0% 98%",
-    # Status hues lift in darkness rather than inverting -- the same colour at the
-    # same lightness reads muddy on a dark ground.
-    "destructive": "0 72% 62%",
-    "warning": "35 92% 60%",
-    "success": "142 65% 50%",
-    "info": "217 91% 68%",
-    "skip": "271 85% 74%",
-    "survive-bg": "142 45% 12%",
-    "lost-bg": "349 60% 14%",
-    "on-status": "240 10% 3.9%",
+    # The deck's title ground, desaturated enough to read a 460-row table against.
+    "background": "250 42% 8%",
+    "foreground": "250 20% 96%",
+    "card": "250 34% 12%",
+    "muted": "250 26% 17%",
+    "muted-foreground": "250 12% 66%",
+    "border": "250 24% 20%",
+    "input": "250 24% 22%",
+    "ring": "240 85% 74%",
+    "primary": "250 20% 96%",
+    "primary-foreground": "250 24% 12%",
+    "accent": "250 26% 18%",
+    "accent-foreground": "250 20% 96%",
+    # Status hues lift on a dark ground rather than inverting.
+    "destructive": "347 85% 66%",
+    "warning": "35 92% 62%",
+    "success": "152 62% 50%",
+    "info": "240 85% 74%",
+    "skip": "315 70% 68%",
+    "survive-bg": "152 45% 13%",
+    "lost-bg": "347 50% 16%",
+    "on-status": "250 24% 10%",
 }
 
 # --- Scales -------------------------------------------------------------------

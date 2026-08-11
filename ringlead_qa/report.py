@@ -35,8 +35,10 @@ body{margin:0;background:hsl(var(--background));color:hsl(var(--foreground));
 :focus-visible{outline:2px solid hsl(var(--ring));outline-offset:2px;border-radius:4px}
 
 /* ---- header ---- */
-h1{font-size:20px;font-weight:600;letter-spacing:-.02em;margin:0}
-.sub{color:hsl(var(--muted-foreground));font-size:13px;margin:4px 0 0}
+h1{font-size:20px;font-weight:650;letter-spacing:-.025em;margin:0}
+.brandrule{height:3px;width:64px;margin:9px 0 0;border-radius:2px;
+  background:linear-gradient(90deg,hsl(var(--destructive)),hsl(var(--skip)),hsl(var(--info)))}
+.sub{color:hsl(var(--muted-foreground));font-size:13px;margin:10px 0 0}
 .head{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;
   flex-wrap:wrap;margin-bottom:24px}
 
@@ -596,6 +598,7 @@ def render(verdicts: list[Verdict], *, source: str, total_rows: int) -> str:
 <div class="head">
   <div>
     <h1>RingLead merge QA</h1>
+    <div class="brandrule"></div>
     <p class="sub">{_esc(source)} · {total_rows:,} rows · {len(verdicts)} groups · {generated}</p>
   </div>
   <div class="prog">
