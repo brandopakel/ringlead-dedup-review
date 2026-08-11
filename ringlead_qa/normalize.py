@@ -94,6 +94,20 @@ def localpart_matches_name(value, full_name) -> bool:
     return bool(parts and toks and parts & toks)
 
 
+def name_coverage(value, tokens) -> int:
+    """How much of a person's name an address actually spells out.
+
+    Counts the name tokens present in the local part, so elisa.delmonte@ scores
+    three against {elisa, del, monte} while elisad@ scores one. Departmental and
+    role mailboxes -- info@, softcat@, dg75-se20-gestion-et-suivi-des-achats@ --
+    score zero, which is what makes them lose to a person's own address.
+    """
+    local = re.sub(r"[^a-z]", "", email_localpart(value))
+    if not local:
+        return 0
+    return sum(1 for t in tokens if len(t) > 2 and t in local)
+
+
 def is_free_email(value) -> bool:
     return email_domain(value) in FREE_EMAIL_DOMAINS
 

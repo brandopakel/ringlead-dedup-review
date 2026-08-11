@@ -891,6 +891,35 @@ def check_data_loss(g: Group) -> list[Finding]:
         e for e in emails
         if e != kept and kept and N.email_domain(e) == N.email_domain(kept)
     ]
+    # Among addresses at the same domain, prefer the one that spells the person out.
+    # A merge that keeps elisad@ over elisa.delmonte@ picks the initial over the name,
+    # and keeping info@ over a personal address is the same mistake in its extreme.
+    if same_domain_alias:
+        tokens = set()
+        for rec in g.records:
+            tokens |= N.meaningful_name_tokens(rec.get(F.F_FULL_NAME))
+        if tokens:
+            fullest = max(same_domain_alias, key=lambda e: N.name_coverage(e, tokens))
+            if N.name_coverage(fullest, tokens) > N.name_coverage(kept, tokens):
+                out.append(Finding(
+                    # Weight 0: the better address is derivable, so this ships as a
+                    # "Should be" value rather than as review work.
+                    code="incomplete_email_kept",
+                    severity=CONTRIB,
+                    weight=0,
+                    title="A fuller address exists at the same domain",
+                    detail=(
+                        "The kept address abbreviates the name; another at the same "
+                        "domain spells it out."
+                    ),
+                    fields=[F.F_EMAIL],
+                    evidence=[("Keeps", kept), ("Discards", fullest)],
+                    corrections=[Correction(
+                        F.F_EMAIL, fullest,
+                        "spells out the name; the kept address abbreviates it",
+                    )],
+                ))
+
     if same_domain_alias:
         out.append(Finding(
             code="email_alias_loss",

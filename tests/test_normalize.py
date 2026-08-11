@@ -139,6 +139,32 @@ class TestNames:
         assert N.person_name("Chris Shifflett") != N.person_name("Christopher Shifflett")
 
 
+class TestNameCoverage:
+    """Among addresses at one domain, the fullest spelling of the name wins."""
+
+    ELISA = {"elisa", "del", "monte"}
+
+    def test_an_initial_scores_below_the_full_name(self):
+        assert N.name_coverage("elisad@seacom.it", self.ELISA) < \
+               N.name_coverage("elisa.delmonte@seacom.it", self.ELISA)
+
+    def test_separators_do_not_matter(self):
+        assert N.name_coverage("elisa_del_monte@x.com", self.ELISA) == \
+               N.name_coverage("elisadelmonte@x.com", self.ELISA)
+
+    @pytest.mark.parametrize("mailbox", [
+        "info@valure-tech.com",
+        "softcat@qbssoftware.com",
+        "dg75-se20-gestion-et-suivi-des-achats@insee.fr",
+    ])
+    def test_departmental_mailboxes_score_nothing(self, mailbox):
+        """Which is how a person's own address beats a team alias."""
+        assert N.name_coverage(mailbox, {"olivier", "kremer"}) == 0
+
+    def test_a_prefixed_address_still_counts_what_it_spells(self):
+        assert N.name_coverage("ts-vikram.singh@rakuten.com", {"vikram", "singh"}) == 2
+
+
 class TestNameRelatedness:
     """Enrichment mis-attaches identifiers, so names get an independent vote."""
 

@@ -420,6 +420,38 @@ class TestNamesOutrankEnrichment:
         assert evaluate(group(m, [d], s)).status != "skip"
 
 
+class TestFullestAddressWins:
+    def _pair(self, kept, other, names=("Elisa Del Monte", "Elisa Del Monte")):
+        common = {F.F_COMPANY: "Seacom"}
+        m = rec("master", **{**common, F.F_RECORD_ID: "00Q_M",
+                             F.F_FULL_NAME: names[0], F.F_EMAIL: kept})
+        d = rec("duplicate", **{**common, F.F_RECORD_ID: "00Q_D",
+                                F.F_FULL_NAME: names[1], F.F_EMAIL: other})
+        s = rec("surviving", **{**common, F.F_RECORD_ID: "00Q_M",
+                                F.F_FULL_NAME: names[0], F.F_EMAIL: kept})
+        return group(m, [d], s)
+
+    def test_the_spelled_out_address_is_recommended(self):
+        v = evaluate(self._pair("elisad@seacom.it", "elisa.delmonte@seacom.it"))
+        fixes = {c.column: c.value for c in v.corrections}
+        assert fixes.get(F.F_EMAIL) == "elisa.delmonte@seacom.it"
+
+    def test_a_personal_address_beats_a_departmental_mailbox(self):
+        v = evaluate(self._pair("info@seacom.it", "elisa.delmonte@seacom.it"))
+        fixes = {c.column: c.value for c in v.corrections}
+        assert fixes.get(F.F_EMAIL) == "elisa.delmonte@seacom.it"
+
+    def test_the_fuller_address_is_left_alone(self):
+        """No recommendation when the survivor already holds the best address."""
+        v = evaluate(self._pair("elisa.delmonte@seacom.it", "elisad@seacom.it"))
+        assert F.F_EMAIL not in {c.column for c in v.corrections}
+
+    def test_different_domains_are_not_this_rule(self):
+        """Cross-domain choices belong to the employer rules, not name coverage."""
+        v = evaluate(self._pair("elisad@seacom.it", "elisa.delmonte@othercorp.com"))
+        assert not any(f.code == "incomplete_email_kept" for f in v.findings)
+
+
 class TestPartialMerges:
     """A group holding two people is not always a write-off."""
 

@@ -48,6 +48,12 @@ SURVIVORSHIP_RULES = {
         "Lead Source Detail. Which event someone last attended is the actionable "
         "fact; the surrounding first-touch fields stay oldest-wins.",
     ),
+    "incomplete_email_kept": (
+        "Field survivorship — Email, among addresses at one domain",
+        "When several addresses share a domain, prefer the one that spells the "
+        "person's name out. This picks elisa.delmonte@ over elisad@, and a personal "
+        "address over a departmental mailbox such as info@ or a team alias.",
+    ),
     "stale_title_kept": (
         "Field survivorship — Title",
         "Prefer the most recently updated record.",
