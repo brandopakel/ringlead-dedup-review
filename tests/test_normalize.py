@@ -85,6 +85,25 @@ class TestCompanyDomainMatching:
     def test_non_matches(self, company, domain):
         assert not N.company_matches_domain(company, domain)
 
+    @pytest.mark.parametrize("company,domain", [
+        ("Health Care Service Corporation", "hcsc.net"),
+        ("National Oceanic and Atmospheric Administration", "noaa.gov"),
+        ("Lawrence Livermore National Laboratory", "llnl.gov"),
+        ("Susquehanna International Group", "sig.com"),
+        ("New York Stock Exchange", "nyse.com"),
+        ("George Washington University", "gwmail.gwu.edu"),
+    ])
+    def test_acronym_domains_match(self, company, domain):
+        """Institutions use their initials as a domain; token overlap cannot see it."""
+        assert N.company_matches_domain(company, domain)
+
+    def test_acronyms_match_whole_tokens_only(self):
+        """"sig" inside "signal.com" is a coincidence, not Susquehanna."""
+        assert not N.company_matches_domain("Susquehanna International Group", "signal.com")
+
+    def test_two_letter_initials_are_too_collidable(self):
+        assert N.company_acronyms("General Electric") == frozenset()
+
     def test_stopwords_do_not_create_false_matches(self):
         # "Technologies" is shared by thousands of companies and must not link them.
         assert not N.company_matches_domain("Acme Technologies", "globex-technologies.com")

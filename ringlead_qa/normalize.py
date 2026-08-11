@@ -172,17 +172,41 @@ def domain_tokens(value) -> frozenset[str]:
     return frozenset(toks - _COMPANY_STOPWORDS)
 
 
+def company_acronyms(value) -> frozenset[str]:
+    """Initials a company is plausibly known by.
+
+    Institutions overwhelmingly use their acronym as a domain -- hcsc.net, noaa.gov,
+    llnl.gov -- and token overlap is structurally blind to that: "hcsc" shares no
+    word with "Health Care Service Corporation". Two forms are produced, initials of
+    every word and of the distinctive words alone, so both "hcsc" and "hcs" match.
+    Three letters minimum, since two-letter initials collide with far too much.
+    """
+    words = [w for w in re.split(r"[^a-z0-9]+", lower(value)) if w]
+    if len(words) < 2:
+        return frozenset()
+    forms = {"".join(w[0] for w in words)}
+    distinctive = [w for w in words if w in company_tokens(value)]
+    if len(distinctive) >= 2:
+        forms.add("".join(w[0] for w in distinctive))
+    return frozenset(f for f in forms if len(f) >= 3)
+
+
 def company_matches_domain(company, domain) -> bool:
     """Does this email domain plausibly belong to this employer?
 
-    Handles three shapes seen in the export: exact token overlap (Intuit/intuit.com),
-    concatenation (DRW Holdings/drwholdings.com), and truncation (Fortescue/fmgl.com.au
-    fails here by design -- an alias that shares no letters can't be inferred).
+    Handles four shapes seen in the export: exact token overlap (Intuit/intuit.com),
+    concatenation (DRW Holdings/drwholdings.com), acronyms (Health Care Service
+    Corporation/hcsc.net), and truncation (Fortescue/fmgl.com.au fails here by design
+    -- an alias that shares no letters can't be inferred).
     """
     ctoks, dtoks = company_tokens(company), domain_tokens(domain)
     if not ctoks or not dtoks:
         return False
     if ctoks & dtoks:
+        return True
+    # Acronyms are matched whole, never as substrings: "sig" inside "signal.com"
+    # would be a coincidence, whereas sig.com is Susquehanna International Group.
+    if company_acronyms(company) & dtoks:
         return True
     # "drwholdings" contains "drw"; "sidleyaustin" contains "sidley".
     cjoined, djoined = "".join(sorted(ctoks)), "".join(sorted(dtoks))
